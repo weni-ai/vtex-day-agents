@@ -1,0 +1,18 @@
+tests:
+    test_1:
+        parameters:
+            query: "Marketplace"
+    test_2:
+        parameters:
+            query: "AI"
+    test_3:
+        parameters:
+            query: "retail"
+    test_4:
+        parameters:
+            query: "CEO"
+    test_5:
+        parameters:
+            query: ""
+            
+  
