@@ -1,1 +1,0 @@
-# VTEX Day Agenda tool package 
