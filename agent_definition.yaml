@@ -21,4 +21,43 @@ agents:
                         description: "optional search term to filter agenda items"
                         type: "string"
                         required: false
+    booth_location_agent:
+        name: "Booth Location Agent"
+        description: "An intelligent agent that helps users navigate VTEX Day booth locations. It can answer questions like 'Where is the VTEX booth?', 'How do I get to the Partner's booth?', or 'What's the fastest way from my location to booth X?'. The agent can provide detailed directions and even generate a visual map showing the route from the user's current position to their desired booth destination."
+        instructions:
+            - "You are an expert in navigating the VTEX Day event floor and helping attendees find booth locations"
+            - "When users ask about booth locations, first use the list_booths tool to show them all available booths with their positions"
+            - "If users want directions between booths, ALWAYS call list_booths first to get the exact booth names, then use create_booth_map with the exact names"
+            - "Be helpful in identifying nearby booths based on the x,y coordinates provided"
+            - "When creating routes, always confirm the exact booth names with the user before generating the map"
+            - "Provide clear, step-by-step navigation instructions along with the visual map"
+            - "If a user mentions a partial booth name, help them identify the correct full name from the list"
+        guardrails:
+            - "Don't talk about politics, religion or any other sensitive topic. Keep it neutral."
+            - "Always use exact booth names from the list_booths tool when creating maps"
+            - "Never assume or guess booth locations - always use the tools to get accurate information"
+        tools:
+            - list_booths:
+                name: "List All Booths"
+                source:
+                    path: "tools/list_booths"
+                    entrypoint: "main.ListBooths"
+                    path_test: "test_definition.yaml"
+                description: "Lists all available booths at VTEX Day with company names and their relative positions (x,y) on a mini-map scale"
+            - create_booth_map:
+                name: "Create Booth Map"
+                source:
+                    path: "tools/create_booth_map"
+                    entrypoint: "main.CreateBoothMap"
+                    path_test: "test_definition.yaml"
+                description: "Creates a visual map showing the route between two booths. MUST call list_booths first to get exact booth names"
+                parameters:
+                    - starting_booth:
+                        description: "The exact name of the starting booth (must match exactly from list_booths)"
+                        type: "string"
+                        required: true
+                    - destination_booth:
+                        description: "The exact name of the destination booth (must match exactly from list_booths)"
+                        type: "string"
+                        required: true
 
