@@ -871,13 +871,18 @@ class CreateBoothMap(Tool):
     
     def send_whatsapp_message(self, image_url, context):
         """Send the route map image to the user via WhatsApp"""
+        # Get parameters from context
+        project_uuid = context.parameters.get("project_uuid")
+        contact_id = context.parameters.get("contact_id")
+        
         # Get credentials from context
         project_token = context.credentials.get("project_token")
-        project_uuid = context.credentials.get("project_uuid")
-        user_phone = context.credentials.get("user_phone", "558299489287")  # Default phone if not provided
         
-        if not project_token or not project_uuid:
-            raise Exception("Missing WhatsApp API credentials (project_token or project_uuid)")
+        if not project_uuid or not contact_id:
+            raise Exception("Missing required parameters: project_uuid and contact_id")
+        
+        if not project_token:
+            raise Exception("Missing required credential: project_token")
         
         # Weni WhatsApp API endpoint
         url = "https://flows.weni.ai/api/v2/whatsapp_broadcasts.json"
@@ -888,7 +893,7 @@ class CreateBoothMap(Tool):
         }
         
         data = {
-            "urns": [f"whatsapp:{user_phone}"],
+            "urns": [contact_id],
             "project": project_uuid,
             "msg": {
                 "text": "Aqui está a sua rota ☝️",
@@ -909,16 +914,15 @@ class CreateBoothMap(Tool):
 
         print(f"BOOTH MAP: {from_booth} to {to_booth}")
 
-        navigator = BoothNavigatorWalkable(use_walkable_paths=True, map_image="vtex_day_map.png")
-        img_bytes, path_names = navigator.draw_route(
-                from_booth,
-                to_booth,
-                "route_map.png",  # This is just for reference, not actually saved
-                show_waypoints=False
-        )
-        
-        # Upload to Imgur
         try:
+            navigator = BoothNavigatorWalkable(use_walkable_paths=True, map_image="vtex_day_map.png")
+            img_bytes, path_names = navigator.draw_route(
+                    from_booth,
+                    to_booth,
+                    "route_map.png",  # This is just for reference, not actually saved
+                    show_waypoints=False
+            )
+        
             image_url = self.upload_to_imgur(img_bytes, context)
             
             # Send via WhatsApp
@@ -930,15 +934,11 @@ class CreateBoothMap(Tool):
                 whatsapp_status = f"WhatsApp delivery failed: {str(e)}"
             
             return TextResponse(data={
-                "image_url": image_url,
-                "path_names": path_names,
-                "message": f"Route map from {from_booth} to {to_booth} has been generated successfully!",
+                "message": f"Route map from {from_booth} to {to_booth} has been generated successfully",
                 "whatsapp_status": whatsapp_status,
                 "whatsapp_response": whatsapp_response
             })
         except Exception as e:
             return TextResponse(data={
-                "error": str(e),
-                "path_names": path_names,
-                "message": "Failed to upload the route map image"
+                "message": "Failed to generate the route map image and send it to the user"
             })

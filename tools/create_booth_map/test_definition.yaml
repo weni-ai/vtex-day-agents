@@ -3,11 +3,17 @@ tests:
         parameters:
             starting_booth: "weni by vtex"
             destination_booth: "aws"
+            contact_id: "test_contact_123"
+            project_uuid: "test-project-uuid-456"
     test_2:
         parameters:
             starting_booth: "microsoft"
             destination_booth: "google"
+            contact_id: "test_contact_789"
+            project_uuid: "test-project-uuid-456"
     test_3:
         parameters:
             starting_booth: "salesforce"
             destination_booth: "oracle"
+            contact_id: "test_contact_abc"
+            project_uuid: "test-project-uuid-456"
