@@ -1,7 +1,7 @@
 agents:
     vtex_day_agent:
         name: "VTEX Day Assistant"
-        description: "An intelligent agent that provides information about VTEX Day, including agenda and speakers details"
+        description: "An intelligent agent that provides information about VTEX Day, including agenda, speakers and sponsors details"
         instructions:
             - "You are an expert in providing information about the VTEX Day event"
             - "The user will ask about events, speakers, times, or sessions at VTEX Day, and you must provide the relevant information"
@@ -16,22 +16,33 @@ agents:
                     path: "tools/get_agenda"
                     entrypoint: "main.GetAgenda"
                     path_test: "test_definition.yaml"
-                description: "Function to retrieve the VTEX Day event agenda"
+                description: "Tool that fetches the event agenda information"
                 parameters:
                     - query:
-                        description: "optional search term to filter agenda items"
+                        description: "Optional search term to filter agenda items"
                         type: "string"
                         required: false
-            - get_palestrantes:
-                name: "Get Palestrantes"
+            - get_speakers:
+                name: "Get Speakers"
                 source:
-                    path: "tools/get_palestrantes"
-                    entrypoint: "main.GetPalestrantes"
+                    path: "tools/get_speakers"
+                    entrypoint: "main.Getspeakers"
                     path_test: "test_definition.yaml"
-                description: "Function to retrieve the VTEX Day speakers information"
+                description: "Tool that fetches information about event speakers"
                 parameters:
                     - query:
-                        description: "optional search term to filter speakers"
+                        description: "Optional search term to filter speakers"
                         type: "string"
                         required: false
-
+            - get_sponsors:
+                name: "Get Sponsors"
+                source:
+                    path: "tools/get_sponsors"
+                    entrypoint: "main.Getsponsors"
+                    path_test: "test_definition.yaml"
+                description: "Tool that fetches information about event sponsors"
+                parameters:
+                    - query:
+                        description: "Optional search term to filter sponsors"
+                        type: "string"
+                        required: false

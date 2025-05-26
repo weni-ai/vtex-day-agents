@@ -5,10 +5,10 @@ import requests
 import json
 
 
-class GetPalestrantes(Tool):
+class Getspeakers(Tool):
     def execute(self, context: Context) -> TextResponse:
-        palestrantes_data = self.get_vtex_palestrantes()
-        return TextResponse(data=palestrantes_data)
+        speakers_data = self.get_vtex_palestrantes()
+        return TextResponse(data=speakers_data)
 
     def get_vtex_palestrantes(self):
         url = "https://api.coodefy.dev/v1/vtex_palestrantes"
