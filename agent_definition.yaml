@@ -22,6 +22,10 @@ agents:
                         type: "string"
                         required: false
     booth_location_agent:
+        credentials:
+            imgur_client_id:
+                label: "Imgur Client ID"
+                placeholder: "Enter your Imgur Client ID (optional - uses default if not provided)"
         name: "Booth Location Agent"
         description: "An intelligent agent that helps users navigate VTEX Day booth locations. It can answer questions like 'Where is the VTEX booth?', 'How do I get to the Partner's booth?', or 'What's the fastest way from my location to booth X?'. The agent can provide detailed directions and even generate a visual map showing the route from the user's current position to their desired booth destination."
         instructions:

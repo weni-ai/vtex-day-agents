@@ -12,6 +12,9 @@ from pathlib import Path
 from math import sqrt
 import json
 import os
+import io
+import base64
+import requests
 
 
 class BoothData:
@@ -138,7 +141,7 @@ class BoothNavigatorWalkable:
         return path_coords, path_names
     
     def draw_route(self, from_booth, to_booth, output_file="route_map.png", show_waypoints=False):
-        """Draw the route on the map and save to file"""
+        """Draw the route on the map and return as BytesIO buffer"""
         
         # Helper function to draw Waze-style arrow
         def draw_waze_arrow(draw, x, y, dx_norm, dy_norm, size, color):
@@ -482,8 +485,9 @@ class BoothNavigatorWalkable:
         border_img.paste(img_cropped, (10, 10))
         
         # Save the result
-        border_img.save(output_file, "PNG")
-        return output_file, path_names
+        img_bytes = io.BytesIO()
+        border_img.save(img_bytes, "PNG")
+        return img_bytes, path_names
     
     def list_booths(self):
         """List all available booths"""
@@ -528,7 +532,7 @@ def main():
     
     try:
         navigator = BoothNavigatorWalkable(use_walkable_paths=use_walkable)
-        output_path, path = navigator.draw_route(from_booth, to_booth, output_file, 
+        img_bytes, path_names = navigator.draw_route(from_booth, to_booth, output_file, 
                                                 show_waypoints=show_waypoints)
         
         print(f"✅ Route generated successfully!")
@@ -536,7 +540,7 @@ def main():
             print(f"📍 Using walkable paths")
         else:
             print(f"📍 Using direct path")
-        print(f"🗺️  Map saved to: {Path(output_path).resolve()}")
+        print(f"🗺️  Map saved to: {Path(output_file).resolve()}")
         
     except Exception as e:
         print(f"❌ Error: {e}")
@@ -822,20 +826,75 @@ def save_waypoints(waypoints, filename="waypoints.json"):
 
 class CreateBoothMap(Tool):
     
+    def upload_to_imgur(self, img_bytes, context):
+        """Upload image to Imgur and return the URL"""
+        # Get Imgur client ID from credentials
+        imgur_client_id = context.credentials.get("imgur_client_id")
+        
+        if not imgur_client_id:
+            # If no Imgur credentials, use a default anonymous client ID
+            # This is a public client ID for anonymous uploads
+            imgur_client_id = "a5c2e47b3c6f07d"
+        
+        # Reset buffer position
+        img_bytes.seek(0)
+        
+        # Convert to base64
+        img_base64 = base64.b64encode(img_bytes.read()).decode('utf-8')
+        
+        # Imgur API endpoint
+        url = "https://api.imgur.com/3/image"
+        
+        headers = {
+            "Authorization": f"Client-ID {imgur_client_id}"
+        }
+        
+        data = {
+            "image": img_base64,
+            "type": "base64",
+            "title": "VTEX Day Route Map",
+            "description": "Route map generated for VTEX Day event navigation"
+        }
+        
+        try:
+            response = requests.post(url, headers=headers, data=data)
+            response.raise_for_status()
+            
+            result = response.json()
+            if result.get("success"):
+                return result["data"]["link"]
+            else:
+                raise Exception(f"Imgur upload failed: {result.get('data', {}).get('error', 'Unknown error')}")
+                
+        except requests.exceptions.RequestException as e:
+            raise Exception(f"Failed to upload image to Imgur: {str(e)}")
+    
     def execute(self, context: Context) -> TextResponse:
         from_booth = context.parameters.get("starting_booth")
         to_booth = context.parameters.get("destination_booth")
-        output_file = "route_map.png"
+
+        print(f"BOOTH MAP: {from_booth} to {to_booth}")
 
         navigator = BoothNavigatorWalkable(use_walkable_paths=True, map_image="vtex_day_map.png")
-        output_path, path_names = navigator.draw_route(
+        img_bytes, path_names = navigator.draw_route(
                 from_booth,
                 to_booth,
-                output_file,
+                "route_map.png",  # This is just for reference, not actually saved
                 show_waypoints=False
         )
-
-        return TextResponse(data={
-            "output_path": output_path,
-            "path_names": path_names
-        })
+        
+        # Upload to Imgur
+        try:
+            image_url = self.upload_to_imgur(img_bytes, context)
+            
+            return TextResponse(data={
+                "image_url": image_url,
+                "path_names": path_names,
+                "message": f"Route map from {from_booth} to {to_booth} has been generated successfully!"
+            })
+        except Exception as e:
+            return TextResponse(data={
+                "error": str(e),
+                "path_names": path_names,
+                "message": "Failed to upload the route map image"
+            })
