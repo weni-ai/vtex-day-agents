@@ -1,5 +1,13 @@
 tests:
-    test_weni_to_aws:
+    test_1:
         parameters:
             starting_booth: "weni by vtex"
             destination_booth: "aws"
+    test_2:
+        parameters:
+            starting_booth: "microsoft"
+            destination_booth: "google"
+    test_3:
+        parameters:
+            starting_booth: "salesforce"
+            destination_booth: "oracle"

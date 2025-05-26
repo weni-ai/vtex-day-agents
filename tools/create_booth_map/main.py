@@ -869,6 +869,40 @@ class CreateBoothMap(Tool):
         except requests.exceptions.RequestException as e:
             raise Exception(f"Failed to upload image to Imgur: {str(e)}")
     
+    def send_whatsapp_message(self, image_url, context):
+        """Send the route map image to the user via WhatsApp"""
+        # Get credentials from context
+        project_token = context.credentials.get("project_token")
+        project_uuid = context.credentials.get("project_uuid")
+        user_phone = context.credentials.get("user_phone", "558299489287")  # Default phone if not provided
+        
+        if not project_token or not project_uuid:
+            raise Exception("Missing WhatsApp API credentials (project_token or project_uuid)")
+        
+        # Weni WhatsApp API endpoint
+        url = "https://flows.weni.ai/api/v2/whatsapp_broadcasts.json"
+        
+        headers = {
+            "Authorization": f"Token {project_token}",
+            "Content-Type": "application/json"
+        }
+        
+        data = {
+            "urns": [f"whatsapp:{user_phone}"],
+            "project": project_uuid,
+            "msg": {
+                "text": "Aqui está a sua rota ☝️",
+                "attachments": [f"image/png:{image_url}"]
+            }
+        }
+        
+        try:
+            response = requests.post(url, headers=headers, json=data)
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise Exception(f"Failed to send WhatsApp message: {str(e)}")
+    
     def execute(self, context: Context) -> TextResponse:
         from_booth = context.parameters.get("starting_booth")
         to_booth = context.parameters.get("destination_booth")
@@ -887,10 +921,20 @@ class CreateBoothMap(Tool):
         try:
             image_url = self.upload_to_imgur(img_bytes, context)
             
+            # Send via WhatsApp
+            whatsapp_response = None
+            try:
+                whatsapp_response = self.send_whatsapp_message(image_url, context)
+                whatsapp_status = "Message sent successfully via WhatsApp"
+            except Exception as e:
+                whatsapp_status = f"WhatsApp delivery failed: {str(e)}"
+            
             return TextResponse(data={
                 "image_url": image_url,
                 "path_names": path_names,
-                "message": f"Route map from {from_booth} to {to_booth} has been generated successfully!"
+                "message": f"Route map from {from_booth} to {to_booth} has been generated successfully!",
+                "whatsapp_status": whatsapp_status,
+                "whatsapp_response": whatsapp_response
             })
         except Exception as e:
             return TextResponse(data={

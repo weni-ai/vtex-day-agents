@@ -26,6 +26,15 @@ agents:
             imgur_client_id:
                 label: "Imgur Client ID"
                 placeholder: "Enter your Imgur Client ID (optional - uses default if not provided)"
+            project_token:
+                label: "Weni Project Token"
+                placeholder: "Enter your Weni project token for WhatsApp API"
+            project_uuid:
+                label: "Weni Project UUID"
+                placeholder: "Enter your Weni project UUID"
+            user_phone:
+                label: "User WhatsApp Phone"
+                placeholder: "User's WhatsApp number (e.g., 558299489287)"
         name: "Booth Location Agent"
         description: "An intelligent agent that helps users navigate VTEX Day booth locations. It can answer questions like 'Where is the VTEX booth?', 'How do I get to the Partner's booth?', or 'What's the fastest way from my location to booth X?'. The agent can provide detailed directions and even generate a visual map showing the route from the user's current position to their desired booth destination."
         instructions:
@@ -38,10 +47,11 @@ agents:
             - "If a user mentions a partial booth name, help them identify the correct full name from the list"
             - "Always display company and booth names in Title Case format for better readability and professionalism"
             - "Examples of proper Title Case formatting: 'Microsoft Corporation' instead of 'microsoft corporation', 'Amazon Web Services' instead of 'amazon web services', 'Google Cloud Platform' instead of 'google cloud platform', 'Salesforce Inc.' instead of 'salesforce inc.'"
+            - "When a route map is generated, it will be automatically sent to the user via WhatsApp"
         guardrails:
             - "Don't talk about politics, religion or any other sensitive topic. Keep it neutral."
             - "Always use exact booth names from the list_booths tool when creating maps"
-            - "Never assume or guess booth locations - always use the tools to get accurate information"
+            - "After sending a route map via WhatsApp, inform the user that the image was sent and offer to help with other questions. Never guess booth locations - only use the tools to get accurate information."
         tools:
             - list_booths:
                 name: "List All Booths"
