@@ -32,6 +32,8 @@ agents:
             - "When creating routes, always confirm the exact booth names with the user before generating the map"
             - "Provide clear, step-by-step navigation instructions along with the visual map"
             - "If a user mentions a partial booth name, help them identify the correct full name from the list"
+            - "Always display company and booth names in Title Case format for better readability and professionalism"
+            - "Examples of proper Title Case formatting: 'Microsoft Corporation' instead of 'microsoft corporation', 'Amazon Web Services' instead of 'amazon web services', 'Google Cloud Platform' instead of 'google cloud platform', 'Salesforce Inc.' instead of 'salesforce inc.'"
         guardrails:
             - "Don't talk about politics, religion or any other sensitive topic. Keep it neutral."
             - "Always use exact booth names from the list_booths tool when creating maps"
