@@ -76,7 +76,8 @@ class BoothNavigatorObstacles:
         return path_coords, path_names
     
     def draw_route(self, from_booth, to_booth, output_file="route_map.png", show_debug=False):
-        """Draw the route on the map and save to file"""
+        """Draw the route on the map and return as bytes"""
+        import io
         
         # Helper function to draw Waze-style arrow
         def draw_waze_arrow(draw, x, y, dx_norm, dy_norm, size, color):
@@ -354,9 +355,12 @@ class BoothNavigatorObstacles:
                               (240, 240, 240, 255))
         border_img.paste(img_cropped, (10, 10))
         
-        # Save the result
-        border_img.save(output_file, "PNG")
-        return output_file, path_names
+        # Save to bytes buffer instead of file
+        img_bytes = io.BytesIO()
+        border_img.save(img_bytes, format="PNG")
+        img_bytes.seek(0)
+        
+        return img_bytes, path_names
     
     def list_booths(self):
         """List all available booths"""
@@ -458,12 +462,14 @@ class ObstaclePathfinder:
         self.visibility_graph = None
         self.corner_padding = 20  # Padding around obstacle corners
         
-        if obstacles_file and os.path.exists(obstacles_file):
-            self.load_obstacles(obstacles_file)
+        self.load_obstacles(obstacles_file)
     
     def load_obstacles(self, filename: str):
         """Load obstacles from a project file"""
-        with open(filename, 'r') as f:
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        json_path = os.path.join(current_dir, filename)
+        
+        with open(json_path, 'r') as f:
             data = json.load(f)
         
         self.obstacles = []
@@ -875,11 +881,15 @@ class CreateBoothMap(Tool):
     def execute(self, context: Context) -> TextResponse:
         from_booth = context.parameters.get("starting_booth")
         to_booth = context.parameters.get("destination_booth")
+        obstacles_file = "project.json"
 
         print(f"BOOTH MAP: {from_booth} to {to_booth}")
 
         try:
-            navigator = BoothNavigatorObstacles(obstacles_file="project.json", map_image="vtex_day_map.png")
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            map_image = os.path.join(current_dir, "vtex_day_map.png")
+
+            navigator = BoothNavigatorObstacles(obstacles_file=obstacles_file, map_image=map_image)
             img_bytes, path_names = navigator.draw_route(
                     from_booth,
                     to_booth,

@@ -2,7 +2,6 @@ from weni import Tool
 from weni.context import Context
 from weni.responses import TextResponse
 import json
-import csv
 import os
 
 
@@ -22,34 +21,35 @@ class ListBooths(Tool):
     
     def get_all_booths(self):
         """
-        Reads booth data from the CSV file.
+        Reads booth data from the project.json file.
         """
         booths_data = []
         
-        # Get the path to the CSV file
+        # Get the path to the JSON file
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        csv_path = os.path.join(current_dir, 'booths.csv')
+        json_path = os.path.join(current_dir, 'project.json')
         
         try:
-            with open(csv_path, 'r', encoding='utf-8') as file:
-                csv_reader = csv.DictReader(file)
-                for row in csv_reader:
-                    booth = {
-                        "name": row['booth'].strip(),
-                        "company": row['booth'].strip(),  # Using booth name as company name
-                        "x": float(row['x']),
-                        "y": float(row['y'])
-                    }
-                    booths_data.append(booth)
+            with open(json_path, 'r', encoding='utf-8') as file:
+                data = json.load(file)
+                for rect_data in data.get('rectangles', []):
+                    if rect_data.get('category') == 'booth':
+                        booth = {
+                            "name": rect_data['name'].strip(),
+                            "company": rect_data['name'].strip(),  # Using booth name as company name
+                            "x": (rect_data['x1'] + rect_data['x2']) / 2,  # Center point
+                            "y": (rect_data['y1'] + rect_data['y2']) / 2   # Center point
+                        }
+                        booths_data.append(booth)
         except FileNotFoundError:
-            # Fallback to some basic booths if CSV not found
-            print(f"Warning: booths.csv not found at {csv_path}")
+            # Fallback to some basic booths if JSON not found
+            print(f"Warning: project.json not found at {json_path}")
             booths_data = [
                 {"name": "VTEX Main Booth", "company": "VTEX", "x": 50, "y": 50},
                 {"name": "Registration Desk", "company": "Event Staff", "x": 5, "y": 50}
             ]
         except Exception as e:
-            print(f"Error reading CSV file: {e}")
+            print(f"Error reading JSON file: {e}")
             booths_data = []
         
         return booths_data
@@ -66,7 +66,6 @@ class ListBooths(Tool):
         
         for booth in booths:
             booth_info = {
-                "booth_name": booth["name"],
                 "company": booth["company"],
                 "location": {
                     "x": round(booth["x"], 2),
