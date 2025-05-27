@@ -37,37 +37,73 @@ class BoothNavigatorObstacles:
         # PDF to PNG transformation parameters (if needed)
         self.scale_factor = 2.0
     
-    def find_booth(self, booth_name):
-        """Find a booth by name"""
-        location = self.pathfinder.get_booth_location(booth_name)
-        if location:
-            # Find the actual booth name that was matched
-            actual_name = booth_name
-            for obstacle in self.pathfinder.obstacles:
-                if obstacle.category == 'booth':
-                    cx = (obstacle.x1 + obstacle.x2) / 2
-                    cy = (obstacle.y1 + obstacle.y2) / 2
-                    if abs(cx - location[0]) < 1 and abs(cy - location[1]) < 1:
-                        actual_name = obstacle.name
-                        break
-            
+    def find_location(self, location_name):
+        """Find a location by name (booths, restrooms, stages, food, information, exits, entrances)"""
+        # Define searchable categories (excluding obstacles that are just for pathfinding)
+        searchable_categories = ['booth', 'restroom', 'stage', 'food', 'information', 'exit', 'entrance']
+        
+        location_name_lower = location_name.lower()
+        
+        # First try exact match (case-insensitive)
+        for obstacle in self.pathfinder.obstacles:
+            if obstacle.category in searchable_categories and obstacle.name.lower() == location_name_lower:
+                # Return center of location
+                cx = (obstacle.x1 + obstacle.x2) / 2
+                cy = (obstacle.y1 + obstacle.y2) / 2
+                return {
+                    'name': obstacle.name,
+                    'category': obstacle.category,
+                    'x': cx,
+                    'y': cy
+                }
+        
+        # Try partial match - prioritize matches at the beginning
+        best_match = None
+        best_match_score = float('inf')
+        
+        for obstacle in self.pathfinder.obstacles:
+            if obstacle.category in searchable_categories:
+                obstacle_name_lower = obstacle.name.lower()
+                if location_name_lower in obstacle_name_lower:
+                    # Score based on position of match (lower is better)
+                    score = obstacle_name_lower.find(location_name_lower)
+                    if score < best_match_score:
+                        best_match = obstacle
+                        best_match_score = score
+        
+        if best_match:
+            cx = (best_match.x1 + best_match.x2) / 2
+            cy = (best_match.y1 + best_match.y2) / 2
             return {
-                'name': actual_name,
-                'x': location[0],
-                'y': location[1]
+                'name': best_match.name,
+                'category': best_match.category,
+                'x': cx,
+                'y': cy
+            }
+        
+        return None
+    
+    def find_booth(self, booth_name):
+        """Find a booth by name (legacy method for backward compatibility)"""
+        location = self.find_location(booth_name)
+        if location:
+            return {
+                'name': location['name'],
+                'x': location['x'],
+                'y': location['y']
             }
         return None
     
-    def find_path(self, from_booth, to_booth):
-        """Find the path between two booths using obstacle avoidance"""
-        # Find booth locations
-        start = self.find_booth(from_booth)
-        end = self.find_booth(to_booth)
+    def find_path(self, from_location, to_location):
+        """Find the path between two locations using obstacle avoidance"""
+        # Find location coordinates
+        start = self.find_location(from_location)
+        end = self.find_location(to_location)
         
         if start is None:
-            raise ValueError(f"Booth '{from_booth}' not found")
+            raise ValueError(f"Location '{from_location}' not found")
         if end is None:
-            raise ValueError(f"Booth '{to_booth}' not found")
+            raise ValueError(f"Location '{to_location}' not found")
         
         # Find path using obstacle pathfinder
         path_coords = self.pathfinder.find_path(start['x'], start['y'], end['x'], end['y'])
@@ -75,7 +111,7 @@ class BoothNavigatorObstacles:
         
         return path_coords, path_names
     
-    def draw_route(self, from_booth, to_booth, output_file="route_map.png", show_debug=False):
+    def draw_route(self, from_location, to_location, output_file="route_map.png", show_debug=False):
         """Draw the route on the map and return as bytes"""
         import io
         
@@ -119,7 +155,7 @@ class BoothNavigatorObstacles:
                 draw.polygon(arrow_points, fill=color)
         
         # Find the path
-        path_coords, path_names = self.find_path(from_booth, to_booth)
+        path_coords, path_names = self.find_path(from_location, to_location)
         
         # Load the base map
         if not os.path.exists(self.map_image_path):
@@ -135,11 +171,16 @@ class BoothNavigatorObstacles:
         if show_debug:
             for obstacle in self.pathfinder.obstacles:
                 color = {
-                    'booth': (255, 182, 193, 50),  # Light pink
-                    'wall': (211, 211, 211, 50),    # Light gray
-                    'stage': (152, 251, 152, 50),   # Light green
-                    'obstacle': (240, 230, 140, 50), # Khaki
-                    'empty': (200, 200, 200, 30)     # Very light gray
+                    'booth': (255, 182, 193, 50),     # Light pink
+                    'wall': (211, 211, 211, 50),      # Light gray
+                    'stage': (152, 251, 152, 50),     # Light green
+                    'restroom': (173, 216, 230, 50),  # Light blue
+                    'food': (255, 218, 185, 50),      # Peach
+                    'information': (255, 255, 224, 50), # Light yellow
+                    'exit': (255, 160, 122, 50),      # Light salmon
+                    'entrance': (144, 238, 144, 50),  # Light green
+                    'obstacle': (240, 230, 140, 50),  # Khaki
+                    'empty': (200, 200, 200, 30)      # Very light gray
                 }.get(obstacle.category, (224, 224, 224, 50))
                 
                 draw.rectangle(
@@ -359,16 +400,30 @@ class BoothNavigatorObstacles:
         img_bytes = io.BytesIO()
         border_img.save(img_bytes, format="PNG")
         img_bytes.seek(0)
-        
+
         return img_bytes, path_names
     
-    def list_booths(self):
-        """List all available booths"""
-        booths = []
+    def list_locations(self):
+        """List all available locations (booths, restrooms, stages, food, information, exits, entrances)"""
+        searchable_categories = ['booth', 'restroom', 'stage', 'food', 'information', 'exit', 'entrance']
+        locations = {}
+        
         for obstacle in self.pathfinder.obstacles:
-            if obstacle.category == 'booth':
-                booths.append(obstacle.name)
-        return sorted(booths)
+            if obstacle.category in searchable_categories:
+                if obstacle.category not in locations:
+                    locations[obstacle.category] = []
+                locations[obstacle.category].append(obstacle.name)
+        
+        # Sort each category
+        for category in locations:
+            locations[category] = sorted(locations[category])
+        
+        return locations
+    
+    def list_booths(self):
+        """List all available booths (legacy method for backward compatibility)"""
+        locations = self.list_locations()
+        return locations.get('booth', [])
     
     def export_debug_visualization(self, output_file="debug_obstacles.png"):
         """Export a debug visualization showing all obstacles"""

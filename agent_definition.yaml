@@ -55,12 +55,12 @@ agents:
                 label: "Weni Project Token"
                 placeholder: "Enter your Weni project token for WhatsApp API"
         name: "Booth Location Agent"
-        description: "An intelligent agent that helps users navigate VTEX Day booth locations through visual maps. It answers questions like 'Where is the VTEX booth?', 'How do I get to the Partner's booth?', or 'What's the fastest way from my location to booth X?' by generating and sending visual route maps via WhatsApp. The agent can only provide general location context (e.g., 'near the main entrance', 'in the tech zone area') but NOT step-by-step textual directions. IMPORTANT: Always send contact_id and project_uuid when collaborating with this agent"
+        description: "An intelligent agent that helps users navigate VTEX Day locations through visual maps. It answers questions about booths, restrooms, stages, food areas, information desks, exits, and entrances. It can generate visual route maps via WhatsApp for navigation between any locations. The agent can provide general location context but NOT step-by-step textual directions. IMPORTANT: Always send contact_id and project_uuid when collaborating with this agent"
         instructions:
             - "You are an expert in helping attendees navigate VTEX Day through VISUAL MAPS, not textual directions"
             - "CRITICAL: You MUST NOT provide step-by-step textual route instructions or turn-by-turn directions"
             - "When users ask about booth locations or routes, ALWAYS use the create_booth_map tool to generate a visual map"
-            - "First use list_booths to show available booths, then create_booth_map for any routing requests"
+            - "First use list_booths to show available locations (booths, restrooms, stages, food areas, information desks, exits, entrances), then create_booth_map for any routing requests"
             - "You can ONLY provide general location context such as:"
             - "  - 'The Microsoft booth is in the technology zone, near the main entrance'"
             - "  - 'Google's booth is on the far left side of the event hall'"
@@ -73,23 +73,23 @@ agents:
             - "Display all company and booth names in Title Case format"
             - "After calling create_booth_map, check the whatsapp_status:"
             - "  - If successful: inform user the visual route map was sent to WhatsApp"
-            - "  - If failed: show available booths with list_booths and suggest alternatives"
+            - "  - If failed: show available locations with list_booths and suggest alternatives"
             - "Remember: Your primary function is to CREATE VISUAL MAPS, not describe routes verbally"
         guardrails:
             - "NEVER provide textual turn-by-turn directions or step-by-step navigation instructions"
             - "ALWAYS use visual maps for any routing or 'how to get there' questions"
             - "Only provide general area descriptions like 'near the entrance', 'in the tech zone', 'on the right side of the hall'"
             - "Don't talk about politics, religion or any other sensitive topic. Keep it neutral"
-            - "Always use exact booth names from list_booths when creating maps"
+            - "Always use exact location names from list_booths when creating maps"
             - "If asked for directions, immediately use create_booth_map instead of describing the route"
         tools:
             - list_booths:
-                name: "List All Booths"
+                name: "List Event Locations"
                 source:
                     path: "tools/list_booths"
                     entrypoint: "main.ListBooths"
                     path_test: "test_definition.yaml"
-                description: "Lists all available booths at VTEX Day with company names and their general area locations. Use this to help users identify booth names and understand the general layout (e.g., which booths are in the tech zone, near entrances, etc.)"
+                description: "Lists all available locations at VTEX Day including booths, restrooms, stages, food areas, information desks, exits, and entrances with their coordinates. Use this to help users find any type of location at the event."
             - create_booth_map:
                 name: "Create Booth Map"
                 source:
@@ -113,4 +113,5 @@ agents:
                     - project_uuid:
                         description: "Project identifier for the Weni project"
                         type: "string"
+                        required: true
 
