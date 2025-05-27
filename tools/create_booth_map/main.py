@@ -2,116 +2,65 @@ from weni import Tool
 from weni.context import Context
 from weni.responses import TextResponse
 
-
-import csv
-import networkx as nx
 from PIL import Image, ImageDraw, ImageFont
-import sys
 import os
-from pathlib import Path
 from math import sqrt
 import json
 import os
-import io
 import base64
 import requests
+import numpy as np
+import heapq
+from math import sqrt
+from typing import List, Tuple
+from dataclasses import dataclass
+from collections import defaultdict
+import traceback
 
 
-class BoothData:
-    """Simple class to handle booth data operations without pandas"""
-    
-    def __init__(self, csv_file):
-        self.booths = []
-        self._load_csv(csv_file)
-    
-    def _load_csv(self, csv_file):
-        """Load booth data from CSV file"""
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        csv_path = os.path.join(current_dir, csv_file)
-
-        with open(csv_path, 'r', encoding='utf-8') as file:
-            reader = csv.DictReader(file)
-            for row in reader:
-                # Convert coordinates to float
-                booth_data = {
-                    'booth': row['booth'],
-                    'x': float(row['x']),
-                    'y': float(row['y']),
-                    'booth_lower': row['booth'].lower()
-                }
-                self.booths.append(booth_data)
-    
-    def find_booth(self, booth_name):
-        """Find a booth by name (case-insensitive)"""
-        booth_lower = booth_name.lower()
+class BoothNavigatorObstacles:
+    def __init__(self, obstacles_file="vtex_obstacles.json", map_image="artifacts/vtex_day_map.png"):
+        """Initialize the booth navigator with obstacle-based pathfinding"""
+        self.map_image_path = map_image
+        self.obstacles_file = obstacles_file
         
-        # Exact match first
-        for booth in self.booths:
-            if booth['booth_lower'] == booth_lower:
-                return booth
-        
-        # Partial match if no exact match
-        for booth in self.booths:
-            if booth_lower in booth['booth_lower']:
-                return booth
-        
-        return None
-    
-    def get_booth_names(self):
-        """Get list of all booth names"""
-        return [booth['booth'] for booth in self.booths]
-
-class BoothNavigatorWalkable:
-    def __init__(self, booths_csv="booths.csv", map_image="artifacts/vtex_day_map.png", use_walkable_paths=True):
-        """Initialize the booth navigator with walkable pathfinding"""
-        # Load booth locations
-        self.booth_data = BoothData(booths_csv)
-        
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        self.map_image_path = os.path.join(current_dir, map_image)
-        
-        # Get image dimensions for coordinate transformation
+        # Get image dimensions
         if os.path.exists(self.map_image_path):
             with Image.open(self.map_image_path) as img:
                 self.img_width, self.img_height = img.size
         else:
             self.img_width, self.img_height = 8000, 5000
         
-        # PDF to PNG transformation parameters
+        # Initialize pathfinder
+        self.pathfinder = ObstaclePathfinder(self.img_width, self.img_height, obstacles_file)
+        
+        # PDF to PNG transformation parameters (if needed)
         self.scale_factor = 2.0
-        
-        # Check if coordinates need transformation
-        max_y = max(booth['y'] for booth in self.booth_data.booths)
-        if max_y < self.img_height / 2:
-            self.needs_transformation = True
-        else:
-            self.needs_transformation = False
-        
-        # Initialize walkable pathfinder
-        self.use_walkable_paths = use_walkable_paths
-        if self.use_walkable_paths:
-            try:
-                self.pathfinder = WalkablePathfinder(map_image)
-            except Exception as e:
-                print(f"Warning: Could not initialize walkable pathfinder: {e}")
-                self.use_walkable_paths = False
-    
-    def _transform_coordinates(self, x, y):
-        """Transform PDF coordinates to PNG coordinates"""
-        if self.needs_transformation:
-            x_png = x * self.scale_factor
-            y_png = y * self.scale_factor
-            return x_png, y_png
-        else:
-            return x, y
     
     def find_booth(self, booth_name):
-        """Find a booth by name (case-insensitive)"""
-        return self.booth_data.find_booth(booth_name)
+        """Find a booth by name"""
+        location = self.pathfinder.get_booth_location(booth_name)
+        if location:
+            # Find the actual booth name that was matched
+            actual_name = booth_name
+            for obstacle in self.pathfinder.obstacles:
+                if obstacle.category == 'booth':
+                    cx = (obstacle.x1 + obstacle.x2) / 2
+                    cy = (obstacle.y1 + obstacle.y2) / 2
+                    if abs(cx - location[0]) < 1 and abs(cy - location[1]) < 1:
+                        actual_name = obstacle.name
+                        break
+            
+            return {
+                'name': actual_name,
+                'x': location[0],
+                'y': location[1]
+            }
+        return None
     
     def find_path(self, from_booth, to_booth):
-        """Find the path between two booths using walkable areas"""
-        # Find booth records
+        """Find the path between two booths using obstacle avoidance"""
+        # Find booth locations
         start = self.find_booth(from_booth)
         end = self.find_booth(to_booth)
         
@@ -120,28 +69,14 @@ class BoothNavigatorWalkable:
         if end is None:
             raise ValueError(f"Booth '{to_booth}' not found")
         
-        # Transform coordinates
-        start_x, start_y = self._transform_coordinates(start['x'], start['y'])
-        end_x, end_y = self._transform_coordinates(end['x'], end['y'])
-        
-        path_coords = []
-        path_names = [start['booth'], end['booth']]
-        
-        if self.use_walkable_paths:
-            # Use walkable pathfinder
-            try:
-                path_coords = self.pathfinder.find_path(start_x, start_y, end_x, end_y)
-            except Exception as e:
-                print(f"Warning: Pathfinding failed, using direct route: {e}")
-                path_coords = [(start_x, start_y), (end_x, end_y)]
-        else:
-            # Direct path
-            path_coords = [(start_x, start_y), (end_x, end_y)]
+        # Find path using obstacle pathfinder
+        path_coords = self.pathfinder.find_path(start['x'], start['y'], end['x'], end['y'])
+        path_names = [start['name'], end['name']]
         
         return path_coords, path_names
     
-    def draw_route(self, from_booth, to_booth, output_file="route_map.png", show_waypoints=False):
-        """Draw the route on the map and return as BytesIO buffer"""
+    def draw_route(self, from_booth, to_booth, output_file="route_map.png", show_debug=False):
+        """Draw the route on the map and save to file"""
         
         # Helper function to draw Waze-style arrow
         def draw_waze_arrow(draw, x, y, dx_norm, dy_norm, size, color):
@@ -195,40 +130,48 @@ class BoothNavigatorWalkable:
         overlay = Image.new('RGBA', img.size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(overlay)
         
-        # Draw waypoints if requested
-        if show_waypoints and self.use_walkable_paths:
-            # Draw waypoint network in light gray
-            for edge in self.pathfinder.nav_graph.edges():
-                pos1 = self.pathfinder.nav_graph.nodes[edge[0]]['pos']
-                pos2 = self.pathfinder.nav_graph.nodes[edge[1]]['pos']
-                draw.line([pos1, pos2], width=1, fill=(200, 200, 200, 100))
+        # Draw obstacles if in debug mode
+        if show_debug:
+            for obstacle in self.pathfinder.obstacles:
+                color = {
+                    'booth': (255, 182, 193, 50),  # Light pink
+                    'wall': (211, 211, 211, 50),    # Light gray
+                    'stage': (152, 251, 152, 50),   # Light green
+                    'obstacle': (240, 230, 140, 50), # Khaki
+                    'empty': (200, 200, 200, 30)     # Very light gray
+                }.get(obstacle.category, (224, 224, 224, 50))
+                
+                draw.rectangle(
+                    [obstacle.x1, obstacle.y1, obstacle.x2, obstacle.y2],
+                    fill=color,
+                    outline=(100, 100, 100, 100),
+                    width=1
+                )
         
         # Get start and end positions
         start_x, start_y = path_coords[0]
         end_x, end_y = path_coords[-1]
         
-        # Draw large directional arrows instead of lines
-        if len(path_coords) > 3:
-            # Find the point on the path closest to destination
-            min_dist_to_end = float('inf')
-            closest_point_idx = 0
-            
-            for i in range(len(path_coords)):
-                dist = ((path_coords[i][0] - end_x)**2 + (path_coords[i][1] - end_y)**2)**0.5
-                if dist < min_dist_to_end:
-                    min_dist_to_end = dist
-                    closest_point_idx = i
-            
-            # Only use path up to the closest point to destination
-            truncated_path = path_coords[:closest_point_idx + 1]
-            
-            # Build segments for arrow placement
-            segments = []
+        # Draw path segments with smooth curves
+        if len(path_coords) > 1:
+            # Draw the path line with a glow effect
+            for width, alpha in [(8, 50), (5, 100), (3, 200)]:
+                for i in range(len(path_coords) - 1):
+                    draw.line(
+                        [path_coords[i], path_coords[i + 1]],
+                        fill=(91, 192, 235, alpha),
+                        width=width
+                    )
+        
+        # Draw directional arrows along the path
+        if len(path_coords) > 2:
+            # Calculate total path length
             total_length = 0
+            segments = []
             
-            for i in range(len(truncated_path) - 1):
-                x1, y1 = truncated_path[i]
-                x2, y2 = truncated_path[i + 1]
+            for i in range(len(path_coords) - 1):
+                x1, y1 = path_coords[i]
+                x2, y2 = path_coords[i + 1]
                 dx = x2 - x1
                 dy = y2 - y1
                 length = (dx**2 + dy**2)**0.5
@@ -245,138 +188,50 @@ class BoothNavigatorWalkable:
                     total_length += length
             
             # Place arrows along the path
-            arrow_spacing = 100  # Base spacing between arrows
-            arrow_size = 45  # Arrow size
-            min_start_distance = 40  # Minimum distance from start for first arrow
-            min_end_distance = 100  # Safe distance from destination
+            arrow_spacing = 150  # Spacing between arrows
+            arrow_size = 40      # Arrow size
+            min_start_distance = 100  # Distance from start for first arrow
+            min_end_distance = 100    # Distance from end for last arrow
             
             # Calculate arrow positions
-            arrow_positions = []
+            current_dist = min_start_distance
             
-            if total_length > min_start_distance + min_end_distance:
-                # First arrow
-                arrow_positions.append(min_start_distance)
-                
-                # Additional arrows
-                current_dist = min_start_distance + arrow_spacing
-                
-                while current_dist < total_length:
-                    # Find position of this potential arrow
-                    arrow_x, arrow_y = 0, 0
-                    for seg in segments:
-                        if seg['start_distance'] <= current_dist < seg['start_distance'] + seg['length']:
-                            t = (current_dist - seg['start_distance']) / seg['length']
-                            arrow_x = seg['start'][0] + t * (seg['end'][0] - seg['start'][0])
-                            arrow_y = seg['start'][1] + t * (seg['end'][1] - seg['start'][1])
-                            break
-                    
-                    # Check distance to destination
-                    dist_to_end = ((arrow_x - end_x)**2 + (arrow_y - end_y)**2)**0.5
-                    
-                    # Stop if too close to destination
-                    if dist_to_end < min_end_distance:
-                        break
-                    
-                    arrow_positions.append(current_dist)
-                    current_dist += arrow_spacing
-            
-            # Draw arrows
-            for arrow_dist in arrow_positions:
+            while current_dist < total_length - min_end_distance:
+                # Find which segment contains this distance
                 for seg in segments:
-                    if seg['start_distance'] <= arrow_dist < seg['start_distance'] + seg['length']:
-                        t = (arrow_dist - seg['start_distance']) / seg['length']
+                    if seg['start_distance'] <= current_dist < seg['start_distance'] + seg['length']:
+                        # Calculate position along segment
+                        t = (current_dist - seg['start_distance']) / seg['length']
                         arrow_x = seg['start'][0] + t * (seg['end'][0] - seg['start'][0])
                         arrow_y = seg['start'][1] + t * (seg['end'][1] - seg['start'][1])
                         
                         # Draw shadow
                         shadow_offset = 2
                         draw_waze_arrow(draw, arrow_x + shadow_offset, arrow_y + shadow_offset, 
-                                    seg['dx_norm'], seg['dy_norm'], arrow_size, 
-                                    (0, 0, 0, 30))
+                                      seg['dx_norm'], seg['dy_norm'], arrow_size, 
+                                      (0, 0, 0, 30))
                         
                         # Draw arrow
-                        draw_waze_arrow(draw, arrow_x, arrow_y, seg['dx_norm'], seg['dy_norm'], arrow_size,
-                                    (91, 192, 235, 255))
+                        draw_waze_arrow(draw, arrow_x, arrow_y, seg['dx_norm'], seg['dy_norm'], 
+                                      arrow_size, (91, 192, 235, 255))
                         break
-        
-        elif len(path_coords) > 1:
-            # For direct paths, place multiple arrows if the distance is long enough
-            dx = end_x - start_x
-            dy = end_y - start_y
-            length = (dx**2 + dy**2)**0.5
-            
-            if length > 0:
-                # Normalize direction
-                dx_norm = dx / length
-                dy_norm = dy / length
                 
-                # Calculate number of arrows based on distance
-                arrow_spacing = 120
-                min_start_distance = 50
-                min_end_distance = 70
-                
-                if length < 200:  # Short distance - single arrow
-                    # Single arrow closer to start
-                    t = 0.35  # Place at 35% of the path
-                    arrow_x = start_x + t * dx
-                    arrow_y = start_y + t * dy
-                    arrow_size = 50
-                    
-                    # Draw shadow
-                    shadow_offset = 3
-                    draw_waze_arrow(draw, arrow_x + shadow_offset, arrow_y + shadow_offset, 
-                                dx_norm, dy_norm, arrow_size, 
-                                (0, 0, 0, 40))  # Light shadow
-                    
-                    # Draw main arrow
-                    draw_waze_arrow(draw, arrow_x, arrow_y, dx_norm, dy_norm, arrow_size,
-                                (91, 192, 235, 255))  # Light blue like Waze
-                else:
-                    # Multiple arrows for longer distances
-                    arrow_positions = []
-                    arrow_size = 45
-                    
-                    # First arrow near start
-                    first_arrow_dist = min_start_distance
-                    arrow_positions.append(first_arrow_dist / length)
-                    
-                    # Additional arrows
-                    current_dist = first_arrow_dist + arrow_spacing
-                    max_dist = length - min_end_distance
-                    
-                    while current_dist < max_dist:
-                        arrow_positions.append(current_dist / length)
-                        current_dist += arrow_spacing
-                    
-                    # Draw arrows
-                    for t in arrow_positions:
-                        arrow_x = start_x + t * dx
-                        arrow_y = start_y + t * dy
-                        
-                        # Draw shadow
-                        shadow_offset = 2
-                        draw_waze_arrow(draw, arrow_x + shadow_offset, arrow_y + shadow_offset, 
-                                    dx_norm, dy_norm, arrow_size, 
-                                    (0, 0, 0, 30))  # Light shadow
-                        
-                        # Draw main arrow
-                        draw_waze_arrow(draw, arrow_x, arrow_y, dx_norm, dy_norm, arrow_size,
-                                    (91, 192, 235, 255))  # Light blue like Waze
+                current_dist += arrow_spacing
         
         # Move markers up to avoid covering booth names
-        marker_offset_y = -120  # Move markers up by 120 pixels (reduced from 200px)
+        marker_offset_y = -80  # Offset for markers
         
         # Draw Point A marker - modern design
         # Pulsing circle effect
         for radius in [35, 25, 15]:
             alpha = 100 + (35 - radius) * 4
             draw.ellipse((start_x-radius, start_y-radius+marker_offset_y, 
-                        start_x+radius, start_y+radius+marker_offset_y), 
+                         start_x+radius, start_y+radius+marker_offset_y), 
                         fill=(0, 255, 100, alpha), outline=None)
         
         # Inner solid circle
         draw.ellipse((start_x-12, start_y-12+marker_offset_y, 
-                    start_x+12, start_y+12+marker_offset_y), 
+                     start_x+12, start_y+12+marker_offset_y), 
                     fill=(0, 200, 80, 255), outline=(255, 255, 255, 255), width=3)
         
         # Draw Point B marker - modern design
@@ -384,12 +239,12 @@ class BoothNavigatorWalkable:
         for radius in [35, 25, 15]:
             alpha = 100 + (35 - radius) * 4
             draw.ellipse((end_x-radius, end_y-radius+marker_offset_y, 
-                        end_x+radius, end_y+radius+marker_offset_y), 
+                         end_x+radius, end_y+radius+marker_offset_y), 
                         fill=(255, 80, 80, alpha), outline=None)
         
         # Inner solid circle
         draw.ellipse((end_x-12, end_y-12+marker_offset_y, 
-                    end_x+12, end_y+12+marker_offset_y), 
+                     end_x+12, end_y+12+marker_offset_y), 
                     fill=(220, 60, 60, 255), outline=(255, 255, 255, 255), width=3)
         
         # Draw connecting lines from markers to actual positions
@@ -413,7 +268,7 @@ class BoothNavigatorWalkable:
             font = ImageFont.load_default()
             font_bold = font
         
-        # Draw floating labels with modern style - positioned above the moved markers
+        # Draw floating labels with modern style
         # Point A label - Portuguese
         label_a = "Você está aqui"
         bbox_a = draw.textbbox((start_x - 70, start_y - 85 + marker_offset_y - 20), label_a, font=font)
@@ -421,28 +276,43 @@ class BoothNavigatorWalkable:
         padding = 10
         draw.rounded_rectangle(
             [(bbox_a[0] - padding, bbox_a[1] - padding), 
-            (bbox_a[2] + padding, bbox_a[3] + padding)],
+             (bbox_a[2] + padding, bbox_a[3] + padding)],
             radius=12,
             fill=(0, 200, 80, 240),
             outline=(255, 255, 255, 255),
             width=2
         )
         draw.text((start_x - 70, start_y - 85 + marker_offset_y - 20), label_a, 
-                fill=(255, 255, 255, 255), font=font)
+                 fill=(255, 255, 255, 255), font=font)
         
         # Point B label - Portuguese
         label_b = "Seu destino"
         bbox_b = draw.textbbox((end_x - 55, end_y - 85 + marker_offset_y - 20), label_b, font=font)
         draw.rounded_rectangle(
             [(bbox_b[0] - padding, bbox_b[1] - padding), 
-            (bbox_b[2] + padding, bbox_b[3] + padding)],
+             (bbox_b[2] + padding, bbox_b[3] + padding)],
             radius=12,
             fill=(220, 60, 60, 240),
             outline=(255, 255, 255, 255),
             width=2
         )
         draw.text((end_x - 55, end_y - 85 + marker_offset_y - 20), label_b, 
-                fill=(255, 255, 255, 255), font=font)
+                 fill=(255, 255, 255, 255), font=font)
+        
+        # Add route information box
+        info_text = f"De: {path_names[0]}\nPara: {path_names[1]}"
+        if len(path_coords) > 2:
+            info_text += f"\n{len(path_coords)-1} pontos de navegação"
+        
+        info_bbox = draw.textbbox((20, 20), info_text, font=font)
+        draw.rounded_rectangle(
+            [(10, 10), (info_bbox[2] + 30, info_bbox[3] + 30)],
+            radius=10,
+            fill=(255, 255, 255, 240),
+            outline=(91, 192, 235, 255),
+            width=2
+        )
+        draw.text((20, 20), info_text, fill=(50, 50, 50, 255), font=font)
         
         # Composite the overlay onto the base image
         img = Image.alpha_composite(img, overlay)
@@ -455,15 +325,15 @@ class BoothNavigatorWalkable:
         # Include marker positions in bounding box calculation
         all_y.extend([start_y + marker_offset_y - 100, end_y + marker_offset_y - 100])
         
-        min_x = max(0, min(all_x) - 200)
-        max_x = min(img.width, max(all_x) + 200)
-        min_y = max(0, min(all_y) - 100)
+        min_x = max(0, min(all_x) - 300)
+        max_x = min(img.width, max(all_x) + 300)
+        min_y = max(0, min(all_y) - 200)
         max_y = min(img.height, max(all_y) + 200)
         
         # Ensure minimum size
         width = max_x - min_x
         height = max_y - min_y
-        min_dimension = 800
+        min_dimension = 1000
         
         if width < min_dimension:
             center_x = (min_x + max_x) // 2
@@ -480,348 +350,442 @@ class BoothNavigatorWalkable:
         
         # Add a subtle border to the cropped image
         border_img = Image.new('RGBA', 
-                            (img_cropped.width + 20, img_cropped.height + 20), 
-                            (240, 240, 240, 255))
+                              (img_cropped.width + 20, img_cropped.height + 20), 
+                              (240, 240, 240, 255))
         border_img.paste(img_cropped, (10, 10))
         
         # Save the result
-        img_bytes = io.BytesIO()
-        border_img.save(img_bytes, "PNG")
-        return img_bytes, path_names
+        border_img.save(output_file, "PNG")
+        return output_file, path_names
     
     def list_booths(self):
         """List all available booths"""
-        return self.booth_data.get_booth_names()
-
-
-def main():
-    """Command line interface"""
-    if len(sys.argv) < 3:
-        print("Usage: python booth_navigator_walkable.py <from_booth> <to_booth> [options]")
-        print("\nOptions:")
-        print("  --direct              Use direct path instead of walkable routes")
-        print("  --show-waypoints      Show waypoint network on map")
-        print("  --output <filename>   Specify output filename")
-        print("\nExample: python booth_navigator_walkable.py 'weni by vtex' 'aws' --show-waypoints")
-        
-        # Show available booths
-        navigator = BoothNavigatorWalkable()
-        print("\nAvailable booths:")
-        booths = navigator.list_booths()
-        for i in range(0, len(booths), 4):
-            print("  " + "  |  ".join(f"{b:<20}" for b in booths[i:i+4]))
-        
-        sys.exit(1)
+        booths = []
+        for obstacle in self.pathfinder.obstacles:
+            if obstacle.category == 'booth':
+                booths.append(obstacle.name)
+        return sorted(booths)
     
-    from_booth = sys.argv[1]
-    to_booth = sys.argv[2]
-    
-    # Parse options
-    use_walkable = "--direct" not in sys.argv
-    show_waypoints = "--show-waypoints" in sys.argv
-    
-    # Find output filename
-    output_file = None
-    if "--output" in sys.argv:
-        idx = sys.argv.index("--output")
-        if idx + 1 < len(sys.argv):
-            output_file = sys.argv[idx + 1]
-    
-    if not output_file:
-        output_file = f"route_{from_booth}_to_{to_booth}_walkable.png".replace(" ", "_")
-    
-    try:
-        navigator = BoothNavigatorWalkable(use_walkable_paths=use_walkable)
-        img_bytes, path_names = navigator.draw_route(from_booth, to_booth, output_file, 
-                                                show_waypoints=show_waypoints)
-        
-        print(f"✅ Route generated successfully!")
-        if use_walkable:
-            print(f"📍 Using walkable paths")
-        else:
-            print(f"📍 Using direct path")
-        print(f"🗺️  Map saved to: {Path(output_file).resolve()}")
-        
-    except Exception as e:
-        print(f"❌ Error: {e}")
-        sys.exit(1)
-
-
-if __name__ == "__main__":
-    main() 
-
-class WalkablePathfinder:
-    def __init__(self, map_image_path="vtex_day_map.png", waypoints_file="custom_waypoints.json"):
-        """Initialize the pathfinder with waypoints for walkable areas"""
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        self.map_image_path = os.path.join(current_dir, map_image_path)
-        
-        # Load image dimensions
-        if os.path.exists(self.map_image_path):
-            with Image.open(self.map_image_path) as img:
-                self.img_width, self.img_height = img.size
-        else:
-            self.img_width, self.img_height = 8000, 5000
-        
-        # Initialize waypoints for corridors
-        # Try to load custom waypoints first
-        if os.path.exists(waypoints_file):
-            print(f"Loading custom waypoints from {waypoints_file}")
-            with open(waypoints_file, 'r') as f:
-                self.waypoints = json.load(f)
-        else:
-            print("Using default waypoints")
-            self.waypoints = self._define_waypoints()
-        
-        # Build navigation graph
-        self.nav_graph = self._build_navigation_graph()
-        
-    def _define_waypoints(self):
-        """Define waypoints in corridors and walkable areas"""
-        # These waypoints define the main corridors in the venue
-        # Based on typical event layout with main corridors between booth areas
-        
-        waypoints = []
-        
-        # Main horizontal corridors (estimated from typical venue layout)
-        # Top corridor
-        for x in range(1000, 7500, 200):
-            waypoints.append({'id': f'top_{x}', 'x': x, 'y': 800, 'type': 'corridor'})
-        
-        # Middle corridors
-        for x in range(1000, 7500, 200):
-            waypoints.append({'id': f'mid1_{x}', 'x': x, 'y': 1800, 'type': 'corridor'})
-            waypoints.append({'id': f'mid2_{x}', 'x': x, 'y': 2800, 'type': 'corridor'})
-        
-        # Bottom corridor
-        for x in range(1000, 7500, 200):
-            waypoints.append({'id': f'bot_{x}', 'x': x, 'y': 3800, 'type': 'corridor'})
-        
-        # Main vertical corridors
-        # Left corridors
-        for y in range(800, 4000, 200):
-            waypoints.append({'id': f'left1_{y}', 'x': 1000, 'y': y, 'type': 'corridor'})
-            waypoints.append({'id': f'left2_{y}', 'x': 2000, 'y': y, 'type': 'corridor'})
-        
-        # Center corridors
-        for y in range(800, 4000, 200):
-            waypoints.append({'id': f'center1_{y}', 'x': 3500, 'y': y, 'type': 'corridor'})
-            waypoints.append({'id': f'center2_{y}', 'x': 4500, 'y': y, 'type': 'corridor'})
-        
-        # Right corridors
-        for y in range(800, 4000, 200):
-            waypoints.append({'id': f'right1_{y}', 'x': 6000, 'y': y, 'type': 'corridor'})
-            waypoints.append({'id': f'right2_{y}', 'x': 7000, 'y': y, 'type': 'corridor'})
-        
-        # Add junction points at corridor intersections
-        junctions = [
-            (1000, 800), (2000, 800), (3500, 800), (4500, 800), (6000, 800), (7000, 800),
-            (1000, 1800), (2000, 1800), (3500, 1800), (4500, 1800), (6000, 1800), (7000, 1800),
-            (1000, 2800), (2000, 2800), (3500, 2800), (4500, 2800), (6000, 2800), (7000, 2800),
-            (1000, 3800), (2000, 3800), (3500, 3800), (4500, 3800), (6000, 3800), (7000, 3800),
-        ]
-        
-        for i, (x, y) in enumerate(junctions):
-            waypoints.append({'id': f'junction_{i}', 'x': x, 'y': y, 'type': 'junction'})
-        
-        return waypoints
-    
-    def _build_navigation_graph(self):
-        """Build a graph connecting nearby waypoints"""
-        G = nx.Graph()
-        
-        # Add all waypoints as nodes
-        for wp in self.waypoints:
-            G.add_node(wp['id'], pos=(wp['x'], wp['y']), type=wp.get('type', 'corridor'))
-        
-        # Connect waypoints based on their positions
-        # Create a position index for faster lookup
-        pos_index = {}
-        for wp in self.waypoints:
-            key = (wp['x'], wp['y'])
-            pos_index[key] = wp['id']
-        
-        # Connect each waypoint to its neighbors
-        for wp in self.waypoints:
-            x, y = wp['x'], wp['y']
-            
-            # Check for horizontal neighbors (same Y, different X)
-            for other_wp in self.waypoints:
-                if other_wp['id'] == wp['id']:
-                    continue
-                    
-                # Connect if on same horizontal line
-                if abs(other_wp['y'] - y) < 10:  # Same Y coordinate (with small tolerance)
-                    x_dist = abs(other_wp['x'] - x)
-                    # Connect if reasonably close on X axis (up to 600 pixels for corridor segments)
-                    if 0 < x_dist <= 600:
-                        # Check if there's no closer waypoint in between
-                        is_neighbor = True
-                        for check_wp in self.waypoints:
-                            if check_wp['id'] in [wp['id'], other_wp['id']]:
-                                continue
-                            # If there's a waypoint between them on the same line, skip
-                            if abs(check_wp['y'] - y) < 10:
-                                if min(wp['x'], other_wp['x']) < check_wp['x'] < max(wp['x'], other_wp['x']):
-                                    is_neighbor = False
-                                    break
-                        
-                        if is_neighbor:
-                            G.add_edge(wp['id'], other_wp['id'], weight=x_dist)
-                
-                # Connect if on same vertical line
-                elif abs(other_wp['x'] - x) < 10:  # Same X coordinate (with small tolerance)
-                    y_dist = abs(other_wp['y'] - y)
-                    # Connect if reasonably close on Y axis (up to 600 pixels for corridor segments)
-                    if 0 < y_dist <= 600:
-                        # Check if there's no closer waypoint in between
-                        is_neighbor = True
-                        for check_wp in self.waypoints:
-                            if check_wp['id'] in [wp['id'], other_wp['id']]:
-                                continue
-                            # If there's a waypoint between them on the same line, skip
-                            if abs(check_wp['x'] - x) < 10:
-                                if min(wp['y'], other_wp['y']) < check_wp['y'] < max(wp['y'], other_wp['y']):
-                                    is_neighbor = False
-                                    break
-                        
-                        if is_neighbor:
-                            G.add_edge(wp['id'], other_wp['id'], weight=y_dist)
-        
-        # Ensure graph is connected by checking connectivity
-        if not nx.is_connected(G):
-            print(f"Warning: Navigation graph is not fully connected. Components: {nx.number_connected_components(G)}")
-        
-        return G
-    
-    def find_nearest_waypoint(self, x, y):
-        """Find the nearest waypoint to a given position"""
-        min_dist = float('inf')
-        nearest = None
-        
-        for wp in self.waypoints:
-            dist = sqrt((wp['x'] - x)**2 + (wp['y'] - y)**2)
-            if dist < min_dist:
-                min_dist = dist
-                nearest = wp
-        
-        return nearest
-    
-    def find_path(self, start_x, start_y, end_x, end_y):
-        """Find a path through walkable areas from start to end"""
-        # Find nearest waypoints to start and end
-        start_wp = self.find_nearest_waypoint(start_x, start_y)
-        end_wp = self.find_nearest_waypoint(end_x, end_y)
-        
-        if not start_wp or not end_wp:
-            # Fallback to direct path
-            return [(start_x, start_y), (end_x, end_y)]
-        
-        # Add temporary nodes for start and end positions
-        temp_start = 'temp_start'
-        temp_end = 'temp_end'
-        
-        # Create a copy of the graph and add temporary connections
-        G = self.nav_graph.copy()
-        G.add_node(temp_start, pos=(start_x, start_y))
-        G.add_node(temp_end, pos=(end_x, end_y))
-        
-        # Connect start/end to nearest waypoints
-        start_dist = sqrt((start_x - start_wp['x'])**2 + (start_y - start_wp['y'])**2)
-        end_dist = sqrt((end_x - end_wp['x'])**2 + (end_y - end_wp['y'])**2)
-        
-        G.add_edge(temp_start, start_wp['id'], weight=start_dist)
-        G.add_edge(temp_end, end_wp['id'], weight=end_dist)
-        
-        # Find shortest path
-        try:
-            path_nodes = nx.shortest_path(G, temp_start, temp_end, weight='weight')
-            
-            # Convert to coordinates
-            path_coords = []
-            for node in path_nodes:
-                if node in G:
-                    pos = G.nodes[node]['pos']
-                    path_coords.append(pos)
-            
-            # Smooth the path
-            path_coords = self._smooth_path(path_coords)
-            
-            return path_coords
-            
-        except nx.NetworkXNoPath:
-            # No path found, return direct line
-            return [(start_x, start_y), (end_x, end_y)]
-    
-    def _smooth_path(self, path_coords):
-        """Smooth the path using basic interpolation"""
-        if len(path_coords) <= 2:
-            return path_coords
-        
-        # Simple smoothing: add intermediate points on long segments
-        smooth_path = [path_coords[0]]
-        
-        for i in range(1, len(path_coords)):
-            prev_x, prev_y = path_coords[i-1]
-            curr_x, curr_y = path_coords[i]
-            
-            dist = sqrt((curr_x - prev_x)**2 + (curr_y - prev_y)**2)
-            
-            # If segment is long, add intermediate points
-            if dist > 400:
-                num_intermediate = int(dist / 200)
-                for j in range(1, num_intermediate):
-                    t = j / num_intermediate
-                    inter_x = prev_x + t * (curr_x - prev_x)
-                    inter_y = prev_y + t * (curr_y - prev_y)
-                    smooth_path.append((inter_x, inter_y))
-            
-            smooth_path.append((curr_x, curr_y))
-        
-        return smooth_path
-    
-    def visualize_waypoints(self, output_file="waypoints_debug.png"):
-        """Visualize all waypoints and connections on the map"""
-        # Load the base map
-        img = Image.open(self.map_image_path).convert("RGBA")
-        overlay = Image.new('RGBA', img.size, (0, 0, 0, 0))
-        draw = ImageDraw.Draw(overlay)
-        
-        # Draw edges
-        for edge in self.nav_graph.edges():
-            pos1 = self.nav_graph.nodes[edge[0]]['pos']
-            pos2 = self.nav_graph.nodes[edge[1]]['pos']
-            draw.line([pos1, pos2], width=2, fill=(0, 0, 255, 100))
-        
-        # Draw waypoints
-        for wp in self.waypoints:
-            x, y = wp['x'], wp['y']
-            radius = 8 if wp['type'] == 'junction' else 5
-            color = (255, 0, 0, 200) if wp['type'] == 'junction' else (0, 255, 0, 200)
-            draw.ellipse((x-radius, y-radius, x+radius, y+radius), fill=color)
-        
-        # Composite and save
-        img = Image.alpha_composite(img, overlay)
-        img.save(output_file)
-        print(f"Waypoints visualization saved to: {output_file}")
+    def export_debug_visualization(self, output_file="debug_obstacles.png"):
+        """Export a debug visualization showing all obstacles"""
+        self.pathfinder.visualize_path([], output_file)
         return output_file
 
 
-# Load waypoints from file if exists
-def load_custom_waypoints(filename="waypoints.json"):
-    """Load custom waypoints from a JSON file"""
-    if os.path.exists(filename):
+@dataclass
+class Point:
+    x: float
+    y: float
+    
+    def __hash__(self):
+        return hash((self.x, self.y))
+    
+    def __eq__(self, other):
+        return self.x == other.x and self.y == other.y
+    
+    def distance_to(self, other):
+        return sqrt((self.x - other.x)**2 + (self.y - other.y)**2)
+
+@dataclass
+class Rectangle:
+    x1: float
+    y1: float
+    x2: float
+    y2: float
+    name: str
+    category: str
+    
+    def contains_point(self, x: float, y: float) -> bool:
+        """Check if a point is inside this rectangle"""
+        return self.x1 <= x <= self.x2 and self.y1 <= y <= self.y2
+    
+    def intersects_line(self, p1: Point, p2: Point) -> bool:
+        """Check if a line segment intersects this rectangle"""
+        # Check if either endpoint is inside the rectangle
+        if self.contains_point(p1.x, p1.y) or self.contains_point(p2.x, p2.y):
+            return True
+        
+        # Check line-rectangle intersection
+        return self._line_intersects_rect(p1.x, p1.y, p2.x, p2.y)
+    
+    def _line_intersects_rect(self, x1, y1, x2, y2) -> bool:
+        """Check if a line segment intersects a rectangle"""
+        # Check if line is completely outside rectangle bounds
+        if (max(x1, x2) < self.x1 or min(x1, x2) > self.x2 or
+            max(y1, y2) < self.y1 or min(y1, y2) > self.y2):
+            return False
+        
+        # Check intersection with each edge of the rectangle
+        edges = [
+            (self.x1, self.y1, self.x2, self.y1),  # Top
+            (self.x2, self.y1, self.x2, self.y2),  # Right
+            (self.x2, self.y2, self.x1, self.y2),  # Bottom
+            (self.x1, self.y2, self.x1, self.y1),  # Left
+        ]
+        
+        for ex1, ey1, ex2, ey2 in edges:
+            if self._lines_intersect(x1, y1, x2, y2, ex1, ey1, ex2, ey2):
+                return True
+        
+        return False
+    
+    def _lines_intersect(self, x1, y1, x2, y2, x3, y3, x4, y4) -> bool:
+        """Check if two line segments intersect"""
+        denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
+        if abs(denom) < 1e-10:
+            return False
+        
+        t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom
+        u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / denom
+        
+        return 0 <= t <= 1 and 0 <= u <= 1
+    
+    def get_corners(self, padding: float = 0) -> List[Point]:
+        """Get the corners of the rectangle with optional padding"""
+        return [
+            Point(self.x1 - padding, self.y1 - padding),
+            Point(self.x2 + padding, self.y1 - padding),
+            Point(self.x2 + padding, self.y2 + padding),
+            Point(self.x1 - padding, self.y2 + padding)
+        ]
+
+class ObstaclePathfinder:
+    def __init__(self, map_width: int, map_height: int, obstacles_file: str = None):
+        """Initialize the pathfinder with obstacles"""
+        self.map_width = map_width
+        self.map_height = map_height
+        self.obstacles = []
+        self.visibility_graph = None
+        self.corner_padding = 20  # Padding around obstacle corners
+        
+        if obstacles_file and os.path.exists(obstacles_file):
+            self.load_obstacles(obstacles_file)
+    
+    def load_obstacles(self, filename: str):
+        """Load obstacles from a project file"""
         with open(filename, 'r') as f:
-            return json.load(f)
-    return None
+            data = json.load(f)
+        
+        self.obstacles = []
+        for rect_data in data.get('rectangles', []):
+            # Skip certain categories that might not be actual obstacles
+            if rect_data.get('category') in ['entrance', 'exit']:
+                continue
+                
+            rect = Rectangle(
+                rect_data['x1'],
+                rect_data['y1'],
+                rect_data['x2'],
+                rect_data['y2'],
+                rect_data.get('name', ''),
+                rect_data.get('category', 'obstacle')
+            )
+            self.obstacles.append(rect)
+        
+        # Build visibility graph after loading obstacles
+        self._build_visibility_graph()
+    
+    def _build_visibility_graph(self):
+        """Build a visibility graph connecting all obstacle corners"""
+        # Collect all corner points
+        corner_points = []
+        for obstacle in self.obstacles:
+            corners = obstacle.get_corners(self.corner_padding)
+            for corner in corners:
+                # Only add corners that are within map bounds and not inside any obstacle
+                if (0 <= corner.x <= self.map_width and 
+                    0 <= corner.y <= self.map_height and
+                    not self._point_in_any_obstacle(corner)):
+                    corner_points.append(corner)
+        
+        # Build graph connecting visible corners
+        self.visibility_graph = defaultdict(list)
+        
+        for i, p1 in enumerate(corner_points):
+            for j, p2 in enumerate(corner_points):
+                if i != j and self._is_path_clear(p1, p2):
+                    distance = p1.distance_to(p2)
+                    self.visibility_graph[p1].append((p2, distance))
+    
+    def _point_in_any_obstacle(self, point: Point) -> bool:
+        """Check if a point is inside any obstacle"""
+        for obstacle in self.obstacles:
+            if obstacle.contains_point(point.x, point.y):
+                return True
+        return False
+    
+    def _is_path_clear(self, p1: Point, p2: Point) -> bool:
+        """Check if a path between two points is clear of obstacles"""
+        for obstacle in self.obstacles:
+            if obstacle.intersects_line(p1, p2):
+                return False
+        return True
+    
+    def _find_nearest_clear_point(self, point: Point) -> Point:
+        """Find the nearest clear point if the given point is inside an obstacle"""
+        # Check if point is already clear
+        if not self._point_in_any_obstacle(point):
+            return point
+        
+        # Find which obstacle contains the point
+        containing_obstacle = None
+        for obstacle in self.obstacles:
+            if obstacle.contains_point(point.x, point.y):
+                containing_obstacle = obstacle
+                break
+        
+        if not containing_obstacle:
+            return point
+        
+        # Find the nearest edge of the obstacle
+        edges = [
+            # Top edge
+            (point.x, containing_obstacle.y1 - self.corner_padding),
+            # Bottom edge
+            (point.x, containing_obstacle.y2 + self.corner_padding),
+            # Left edge
+            (containing_obstacle.x1 - self.corner_padding, point.y),
+            # Right edge
+            (containing_obstacle.x2 + self.corner_padding, point.y),
+            # Corners
+            (containing_obstacle.x1 - self.corner_padding, containing_obstacle.y1 - self.corner_padding),
+            (containing_obstacle.x2 + self.corner_padding, containing_obstacle.y1 - self.corner_padding),
+            (containing_obstacle.x1 - self.corner_padding, containing_obstacle.y2 + self.corner_padding),
+            (containing_obstacle.x2 + self.corner_padding, containing_obstacle.y2 + self.corner_padding),
+        ]
+        
+        # Find the nearest clear point
+        best_point = None
+        best_distance = float('inf')
+        
+        for x, y in edges:
+            # Check if point is within map bounds
+            if 0 <= x <= self.map_width and 0 <= y <= self.map_height:
+                test_point = Point(x, y)
+                # Check if point is clear
+                if not self._point_in_any_obstacle(test_point):
+                    distance = point.distance_to(test_point)
+                    if distance < best_distance:
+                        best_distance = distance
+                        best_point = test_point
+        
+        # If we found a clear point, return it; otherwise return original
+        return best_point if best_point else point
+    
+    def find_path(self, start_x: float, start_y: float, end_x: float, end_y: float) -> List[Tuple[float, float]]:
+        """Find the shortest path avoiding obstacles"""
+        start = Point(start_x, start_y)
+        end = Point(end_x, end_y)
+        
+        # If start or end points are inside obstacles, move them to the nearest clear position
+        start_clear = self._find_nearest_clear_point(start)
+        end_clear = self._find_nearest_clear_point(end)
+        
+        # Check if direct path is possible
+        if self._is_path_clear(start_clear, end_clear):
+            return [(start_clear.x, start_clear.y), (end_clear.x, end_clear.y)]
+        
+        # Use A* algorithm on visibility graph
+        path_points = self._astar_search(start_clear, end_clear)
+        
+        if path_points:
+            # Smooth the path
+            smoothed = self._smooth_path(path_points)
+            # Add original start and end points if they were adjusted
+            result = []
+            if start != start_clear:
+                result.append((start.x, start.y))
+            result.extend([(p.x, p.y) for p in smoothed])
+            if end != end_clear:
+                result.append((end.x, end.y))
+            return result
+        
+        # If no path found, return direct path as fallback
+        return [(start.x, start.y), (end.x, end.y)]
+    
+    def _astar_search(self, start: Point, goal: Point) -> List[Point]:
+        """A* search algorithm on visibility graph"""
+        # Create temporary graph including start and goal
+        temp_graph = defaultdict(list, self.visibility_graph)
+        
+        # Add connections from start to visible corners
+        for corner in self.visibility_graph.keys():
+            if self._is_path_clear(start, corner):
+                distance = start.distance_to(corner)
+                temp_graph[start].append((corner, distance))
+                temp_graph[corner].append((start, distance))
+        
+        # Add connections from goal to visible corners
+        for corner in self.visibility_graph.keys():
+            if self._is_path_clear(goal, corner):
+                distance = goal.distance_to(corner)
+                temp_graph[goal].append((corner, distance))
+                temp_graph[corner].append((goal, distance))
+        
+        # Add direct connection if possible
+        if self._is_path_clear(start, goal):
+            distance = start.distance_to(goal)
+            temp_graph[start].append((goal, distance))
+        
+        # A* algorithm
+        open_set = [(0, start)]
+        came_from = {}
+        g_score = {start: 0}
+        f_score = {start: start.distance_to(goal)}
+        
+        while open_set:
+            current_f, current = heapq.heappop(open_set)
+            
+            if current == goal:
+                # Reconstruct path
+                path = []
+                while current in came_from:
+                    path.append(current)
+                    current = came_from[current]
+                path.append(start)
+                path.reverse()
+                return path
+            
+            for neighbor, distance in temp_graph[current]:
+                tentative_g = g_score[current] + distance
+                
+                if neighbor not in g_score or tentative_g < g_score[neighbor]:
+                    came_from[neighbor] = current
+                    g_score[neighbor] = tentative_g
+                    f_score[neighbor] = tentative_g + neighbor.distance_to(goal)
+                    heapq.heappush(open_set, (f_score[neighbor], neighbor))
+        
+        return []  # No path found
+    
+    def _smooth_path(self, path: List[Point]) -> List[Point]:
+        """Smooth the path by removing unnecessary waypoints"""
+        if len(path) <= 2:
+            return path
+        
+        smoothed = [path[0]]
+        i = 0
+        
+        while i < len(path) - 1:
+            # Try to skip ahead as far as possible
+            j = len(path) - 1
+            while j > i + 1:
+                if self._is_path_clear(path[i], path[j]):
+                    break
+                j -= 1
+            
+            smoothed.append(path[j])
+            i = j
+        
+        return smoothed
+    
+    def visualize_path(self, path: List[Tuple[float, float]], output_file: str = "path_debug.png"):
+        """Visualize the path and obstacles for debugging"""
+        # Create a white image
+        img = Image.new('RGB', (self.map_width, self.map_height), 'white')
+        draw = ImageDraw.Draw(img)
+        
+        # Draw obstacles
+        for obstacle in self.obstacles:
+            color = {
+                'booth': '#FFB6C1',
+                'wall': '#D3D3D3',
+                'stage': '#98FB98',
+                'obstacle': '#F0E68C'
+            }.get(obstacle.category, '#E0E0E0')
+            
+            draw.rectangle(
+                [obstacle.x1, obstacle.y1, obstacle.x2, obstacle.y2],
+                fill=color,
+                outline='black',
+                width=2
+            )
+            
+            # Draw obstacle name
+            cx = (obstacle.x1 + obstacle.x2) / 2
+            cy = (obstacle.y1 + obstacle.y2) / 2
+            draw.text((cx, cy), obstacle.name, fill='black', anchor='mm')
+        
+        # Draw visibility graph (optional, for debugging)
+        if self.visibility_graph:
+            for point, neighbors in self.visibility_graph.items():
+                for neighbor, _ in neighbors:
+                    draw.line(
+                        [(point.x, point.y), (neighbor.x, neighbor.y)],
+                        fill='lightgray',
+                        width=1
+                    )
+        
+        # Draw path
+        if len(path) > 1:
+            for i in range(len(path) - 1):
+                draw.line(
+                    [path[i], path[i + 1]],
+                    fill='blue',
+                    width=3
+                )
+            
+            # Draw waypoints
+            for point in path:
+                draw.ellipse(
+                    [point[0] - 5, point[1] - 5, point[0] + 5, point[1] + 5],
+                    fill='red',
+                    outline='darkred'
+                )
+        
+        img.save(output_file)
+        return output_file
+    
+    def get_booth_location(self, booth_name: str) -> Tuple[float, float]:
+        """Get the location of a booth by name"""
+        booth_name_lower = booth_name.lower()
+        
+        # First try exact match (case-insensitive)
+        for obstacle in self.obstacles:
+            if obstacle.category == 'booth' and obstacle.name.lower() == booth_name_lower:
+                # Return center of booth
+                cx = (obstacle.x1 + obstacle.x2) / 2
+                cy = (obstacle.y1 + obstacle.y2) / 2
+                return (cx, cy)
+        
+        # Try partial match - prioritize matches at the beginning
+        best_match = None
+        best_match_score = float('inf')
+        
+        for obstacle in self.obstacles:
+            if obstacle.category == 'booth':
+                obstacle_name_lower = obstacle.name.lower()
+                if booth_name_lower in obstacle_name_lower:
+                    # Score based on position of match (lower is better)
+                    score = obstacle_name_lower.find(booth_name_lower)
+                    if score < best_match_score:
+                        best_match = obstacle
+                        best_match_score = score
+        
+        if best_match:
+            cx = (best_match.x1 + best_match.x2) / 2
+            cy = (best_match.y1 + best_match.y2) / 2
+            return (cx, cy)
+        
+        return None
 
-
-# Save waypoints to file
-def save_waypoints(waypoints, filename="waypoints.json"):
-    """Save waypoints to a JSON file for editing"""
-    with open(filename, 'w') as f:
-        json.dump(waypoints, f, indent=2)
-    print(f"Waypoints saved to {filename}")
+def create_navigation_grid(width: int, height: int, obstacles: List[Rectangle], 
+                         grid_size: int = 10) -> np.ndarray:
+    """Create a navigation grid for alternative pathfinding"""
+    # Create grid (1 = walkable, 0 = obstacle)
+    grid_width = width // grid_size
+    grid_height = height // grid_size
+    grid = np.ones((grid_height, grid_width), dtype=np.uint8)
+    
+    # Mark obstacles in grid
+    for obstacle in obstacles:
+        x1 = max(0, int(obstacle.x1 // grid_size))
+        y1 = max(0, int(obstacle.y1 // grid_size))
+        x2 = min(grid_width - 1, int(obstacle.x2 // grid_size))
+        y2 = min(grid_height - 1, int(obstacle.y2 // grid_size))
+        
+        grid[y1:y2+1, x1:x2+1] = 0
+    
+    return grid
 
 
 class CreateBoothMap(Tool):
@@ -915,12 +879,12 @@ class CreateBoothMap(Tool):
         print(f"BOOTH MAP: {from_booth} to {to_booth}")
 
         try:
-            navigator = BoothNavigatorWalkable(use_walkable_paths=True, map_image="vtex_day_map.png")
+            navigator = BoothNavigatorObstacles(obstacles_file="project.json", map_image="vtex_day_map.png")
             img_bytes, path_names = navigator.draw_route(
                     from_booth,
                     to_booth,
                     "route_map.png",  # This is just for reference, not actually saved
-                    show_waypoints=False
+                    show_debug=False
             )
         
             image_url = self.upload_to_imgur(img_bytes, context)
@@ -931,6 +895,7 @@ class CreateBoothMap(Tool):
                 whatsapp_response = self.send_whatsapp_message(image_url, context)
                 whatsapp_status = "Message sent successfully via WhatsApp"
             except Exception as e:
+                traceback.print_exc()
                 whatsapp_status = f"WhatsApp delivery failed: {str(e)}"
             
             return TextResponse(data={
@@ -939,6 +904,7 @@ class CreateBoothMap(Tool):
                 "whatsapp_response": whatsapp_response
             })
         except Exception as e:
+            traceback.print_exc()
             return TextResponse(data={
                 "message": "Failed to generate the route map image and send it to the user"
             })
