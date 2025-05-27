@@ -1,3 +1,3 @@
 tests:
-    test_list_all_booths:
+    test_list_all_locations:
         parameters: {}
