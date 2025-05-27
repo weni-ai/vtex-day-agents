@@ -934,11 +934,11 @@ class CreateBoothMap(Tool):
             raise Exception(f"Failed to send WhatsApp message: {str(e)}")
     
     def execute(self, context: Context) -> TextResponse:
-        from_booth = context.parameters.get("starting_booth")
-        to_booth = context.parameters.get("destination_booth")
+        from_location = context.parameters.get("starting_location")
+        to_location = context.parameters.get("destination_location")
         obstacles_file = "project.json"
 
-        print(f"BOOTH MAP: {from_booth} to {to_booth}")
+        print(f"BOOTH MAP: {from_location} to {to_location}")
 
         try:
             current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -946,8 +946,8 @@ class CreateBoothMap(Tool):
 
             navigator = BoothNavigatorObstacles(obstacles_file=obstacles_file, map_image=map_image)
             img_bytes, path_names = navigator.draw_route(
-                    from_booth,
-                    to_booth,
+                    from_location,
+                    to_location,
                     "route_map.png",  # This is just for reference, not actually saved
                     show_debug=False
             )
@@ -964,9 +964,15 @@ class CreateBoothMap(Tool):
                 whatsapp_status = f"WhatsApp delivery failed: {str(e)}"
             
             return TextResponse(data={
-                "message": f"Route map from {from_booth} to {to_booth} has been generated successfully",
+                "message": f"Route map from {from_location} to {to_location} has been generated successfully",
                 "whatsapp_status": whatsapp_status,
                 "whatsapp_response": whatsapp_response
+            })
+        except ValueError as e:
+            traceback.print_exc()
+            return TextResponse(data={
+                "message": f"Failed to generate route map: {str(e)}. Please verify the location names are correct and try again.",
+                "error": str(e)
             })
         except Exception as e:
             traceback.print_exc()
