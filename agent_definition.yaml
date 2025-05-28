@@ -1,5 +1,10 @@
 agents:
     vtex_day_agent:
+        credentials:
+            API_KEY:
+            label: "API Key"
+            placeholder: "Token c249262414613b7cedfdb2fd99daa8b3964639d5"
+            is_confidential: true
         name: "VTEX Day Assistant"
         description: "An intelligent agent that provides information about VTEX Day, including agenda, speakers and sponsors details"
         instructions:

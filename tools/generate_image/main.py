@@ -11,10 +11,13 @@ class GenerateImage(Tool):
         return TextResponse(data=generate)
 
     def generate_image(self):
+        
+        api_key = Context.get_credential("API_KEY")
+        
         url = "https://flows.weni.ai/api/v2/flow_starts.json"
         headers = {
             "Content-Type": "application/json",
-            "Authorization": "Token c249262414613b7cedfdb2fd99daa8b3964639d5",  # Push API token
+            "Authorization": f"{api_key}",  # Push API token
         }
         numero_disparo = Context.contact.get("urn")
         
