@@ -125,12 +125,4 @@ agents:
                         description: "The EXACT name of the destination location as it appears in list_booths output. Must match exactly - do not modify the name. For non-booth ambiguous destinations, use the closest one to starting_location based on coordinates."
                         type: "string"
                         required: true
-                    - contact_id:
-                        description: "Contact identifier for the user requesting the route map"
-                        type: "string"
-                        required: true
-                    - project_uuid:
-                        description: "Project identifier for the Weni project"
-                        type: "string"
-                        required: true
 

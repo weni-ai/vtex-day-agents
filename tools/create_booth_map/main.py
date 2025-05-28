@@ -897,14 +897,14 @@ class CreateBoothMap(Tool):
     def send_whatsapp_message(self, image_url, context):
         """Send the route map image to the user via WhatsApp"""
         # Get parameters from context
-        project_uuid = context.parameters.get("project_uuid")
-        contact_id = context.parameters.get("contact_id")
+        project_uuid = context.project.get("uuid")
+        urn = context.contact.get("urn")
         
         # Get credentials from context
         project_token = context.credentials.get("project_token")
         
-        if not project_uuid or not contact_id:
-            raise Exception("Missing required parameters: project_uuid and contact_id")
+        if not project_uuid or not urn:
+            raise Exception("Missing required parameters: project_uuid and urn")
         
         if not project_token:
             raise Exception("Missing required credential: project_token")
@@ -918,7 +918,7 @@ class CreateBoothMap(Tool):
         }
         
         data = {
-            "urns": [contact_id],
+            "urns": [urn],
             "project": project_uuid,
             "msg": {
                 "text": "Aqui está a sua rota ☝️",
