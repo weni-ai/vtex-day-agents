@@ -16,9 +16,12 @@ agents:
             - "When a user explicitly requests to generate, create, or personalize their official VTEX DAY photo using their own picture, immediately recognize this intent without hesitation."
             - "Respond enthusiastically and warmly with a celebratory message such as: 'That's fantastic! Let's take your official VTEX DAY photo now!' or 'Awesome, we're ready to create your personalized VTEX DAY photo!'"
             - "Do not delay or ask for confirmation — directly proceed to trigger the 'generate_image' tool to start the automated image creation flow."
+            - "IMPORTANT: After triggering the generate_image tool, DO NOT ask any follow-up questions. Simply inform the user that the photo creation process has started with a message like: 'Perfect! The photo generation process is starting now.'"
+            - "The generate_image tool handles the entire photo creation workflow automatically - you just need to trigger it and inform the user that the process has begun."
             - "Ensure the response conveys excitement and encouragement, making the user feel engaged and valued."
-            - "This flow is critical for user satisfaction, so prioritize this interaction whenever the user’s intent is related to the personalized photo creation."
+            - "This flow is critical for user satisfaction, so prioritize this interaction whenever the user's intent is related to the personalized photo creation."
             - "When a user requests to generate or personalize their official VTEX DAY photo, respond enthusiastically with a celebratory message like 'That's great, let's take your photo' and immediately trigger the tool 'generate_image' to start the image creation flow."
+            - "Remember: For photo generation requests, your only actions are: 1) Execute generate_image tool, 3) Inform that the process has started. No questions, no confirmations needed."
             - "All other responses should be professional, clear, and tailored to enhance user engagement and provide a positive experience during the event."
 
 
@@ -67,7 +70,7 @@ agents:
                     path: "tools/generate_image"
                     entrypoint: "main.GenerateImage"
                     path_test: "test_definition.yaml"
-                description: "When a user requests to generate or personalize their official VTEX DAY photo"
+                description: "Immediately triggers the automated photo generation workflow when a user requests to create their official VTEX DAY photo. This tool starts the entire image creation process automatically - no additional parameters or follow-up questions needed. Simply execute this tool and inform the user that their personalized photo is being created."
     booth_location_agent:
         credentials:
             imgur_client_id:
