@@ -9,18 +9,18 @@ import json
 import os
 import base64
 import requests
-import numpy as np
 import heapq
+import time
 from math import sqrt
-from typing import List, Tuple
+from typing import List, Tuple, Dict, Set, Optional
 from dataclasses import dataclass
 from collections import defaultdict
 import traceback
 
 
-class BoothNavigatorObstacles:
+class FastBoothNavigator:
     def __init__(self, obstacles_file="vtex_obstacles.json", map_image="artifacts/vtex_day_map.png"):
-        """Initialize the booth navigator with obstacle-based pathfinding"""
+        """Initialize the booth navigator with optimized pathfinding"""
         self.map_image_path = map_image
         self.obstacles_file = obstacles_file
         
@@ -31,8 +31,8 @@ class BoothNavigatorObstacles:
         else:
             self.img_width, self.img_height = 8000, 5000
         
-        # Initialize pathfinder
-        self.pathfinder = ObstaclePathfinder(self.img_width, self.img_height, obstacles_file)
+        # Initialize optimized pathfinder
+        self.pathfinder = FastObstaclePathfinder(self.img_width, self.img_height, obstacles_file)
         
         # PDF to PNG transformation parameters (if needed)
         self.scale_factor = 2.0
@@ -105,7 +105,7 @@ class BoothNavigatorObstacles:
         if end is None:
             raise ValueError(f"Location '{to_location}' not found")
         
-        # Find path using obstacle pathfinder
+        # Find path using optimized pathfinder
         path_coords = self.pathfinder.find_path(start['x'], start['y'], end['x'], end['y'])
         path_names = [start['name'], end['name']]
         
@@ -443,22 +443,9 @@ class Point:
         return self.x == other.x and self.y == other.y
     
     def __lt__(self, other):
-        """Less than comparison for heapq - compare by x first, then y"""
         if self.x != other.x:
             return self.x < other.x
         return self.y < other.y
-    
-    def __le__(self, other):
-        """Less than or equal comparison"""
-        return self == other or self < other
-    
-    def __gt__(self, other):
-        """Greater than comparison"""
-        return not self <= other
-    
-    def __ge__(self, other):
-        """Greater than or equal comparison"""
-        return not self < other
     
     def distance_to(self, other):
         return sqrt((self.x - other.x)**2 + (self.y - other.y)**2)
@@ -476,46 +463,50 @@ class Rectangle:
         """Check if a point is inside this rectangle"""
         return self.x1 <= x <= self.x2 and self.y1 <= y <= self.y2
     
-    def intersects_line(self, p1: Point, p2: Point) -> bool:
-        """Check if a line segment intersects this rectangle"""
-        # Check if either endpoint is inside the rectangle
-        if self.contains_point(p1.x, p1.y) or self.contains_point(p2.x, p2.y):
+    def intersects_line_fast(self, x1: float, y1: float, x2: float, y2: float) -> bool:
+        """Fast line-rectangle intersection test"""
+        # Quick rejection using bounding boxes
+        if max(x1, x2) < self.x1 or min(x1, x2) > self.x2:
+            return False
+        if max(y1, y2) < self.y1 or min(y1, y2) > self.y2:
+            return False
+        
+        # Check if either endpoint is inside
+        if (self.x1 <= x1 <= self.x2 and self.y1 <= y1 <= self.y2) or \
+           (self.x1 <= x2 <= self.x2 and self.y1 <= y2 <= self.y2):
             return True
         
-        # Check line-rectangle intersection
-        return self._line_intersects_rect(p1.x, p1.y, p2.x, p2.y)
-    
-    def _line_intersects_rect(self, x1, y1, x2, y2) -> bool:
-        """Check if a line segment intersects a rectangle"""
-        # Check if line is completely outside rectangle bounds
-        if (max(x1, x2) < self.x1 or min(x1, x2) > self.x2 or
-            max(y1, y2) < self.y1 or min(y1, y2) > self.y2):
-            return False
+        # Use parametric line equation for edge intersections
+        dx = x2 - x1
+        dy = y2 - y1
         
-        # Check intersection with each edge of the rectangle
-        edges = [
-            (self.x1, self.y1, self.x2, self.y1),  # Top
-            (self.x2, self.y1, self.x2, self.y2),  # Right
-            (self.x2, self.y2, self.x1, self.y2),  # Bottom
-            (self.x1, self.y2, self.x1, self.y1),  # Left
-        ]
+        # Check intersection with rectangle edges
+        tmin = 0.0
+        tmax = 1.0
         
-        for ex1, ey1, ex2, ey2 in edges:
-            if self._lines_intersect(x1, y1, x2, y2, ex1, ey1, ex2, ey2):
-                return True
+        # Check against left/right edges
+        if dx != 0:
+            t1 = (self.x1 - x1) / dx
+            t2 = (self.x2 - x1) / dx
+            tmin = max(tmin, min(t1, t2))
+            tmax = min(tmax, max(t1, t2))
+        else:
+            # Line is vertical
+            if x1 < self.x1 or x1 > self.x2:
+                return False
         
-        return False
-    
-    def _lines_intersect(self, x1, y1, x2, y2, x3, y3, x4, y4) -> bool:
-        """Check if two line segments intersect"""
-        denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
-        if abs(denom) < 1e-10:
-            return False
+        # Check against top/bottom edges
+        if dy != 0:
+            t1 = (self.y1 - y1) / dy
+            t2 = (self.y2 - y1) / dy
+            tmin = max(tmin, min(t1, t2))
+            tmax = min(tmax, max(t1, t2))
+        else:
+            # Line is horizontal
+            if y1 < self.y1 or y1 > self.y2:
+                return False
         
-        t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom
-        u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / denom
-        
-        return 0 <= t <= 1 and 0 <= u <= 1
+        return tmin <= tmax
     
     def get_corners(self, padding: float = 0) -> List[Point]:
         """Get the corners of the rectangle with optional padding"""
@@ -526,16 +517,31 @@ class Rectangle:
             Point(self.x1 - padding, self.y2 + padding)
         ]
 
-class ObstaclePathfinder:
+class FastObstaclePathfinder:
     def __init__(self, map_width: int, map_height: int, obstacles_file: str = None):
         """Initialize the pathfinder with obstacles"""
         self.map_width = map_width
         self.map_height = map_height
         self.obstacles = []
         self.visibility_graph = None
-        self.corner_padding = 20  # Padding around obstacle corners
+        self.corner_padding = 20
         
-        self.load_obstacles(obstacles_file)
+        # Optimization: spatial grid for obstacle lookup
+        self.grid_size = 500  # Grid cell size
+        self.obstacle_grid = None
+        
+        # Cache for path queries
+        self.path_cache = {}
+        self.max_cache_size = 100
+        
+        # Lazy loading flag
+        self.graph_built = False
+        
+        # Performance tracking
+        self.build_time = 0
+        
+        if obstacles_file:
+            self.load_obstacles(obstacles_file)
     
     def load_obstacles(self, filename: str):
         """Load obstacles from a project file"""
@@ -546,8 +552,10 @@ class ObstaclePathfinder:
             data = json.load(f)
         
         self.obstacles = []
+        
+        # Filter and load obstacles
         for rect_data in data.get('rectangles', []):
-            # Skip certain categories that might not be actual obstacles
+            # Skip certain categories
             if rect_data.get('category') in ['entrance', 'exit']:
                 continue
                 
@@ -561,160 +569,237 @@ class ObstaclePathfinder:
             )
             self.obstacles.append(rect)
         
-        # Build visibility graph after loading obstacles
-        self._build_visibility_graph()
+        # Build spatial grid
+        self._build_spatial_grid()
+        
+        # Don't build visibility graph immediately
+        self.graph_built = False
+    
+    def _build_spatial_grid(self):
+        """Build a spatial grid for fast obstacle lookup"""
+        grid_width = int(self.map_width / self.grid_size) + 1
+        grid_height = int(self.map_height / self.grid_size) + 1
+        
+        self.obstacle_grid = [[[] for _ in range(grid_width)] for _ in range(grid_height)]
+        
+        # Add obstacles to grid cells they overlap
+        for idx, obstacle in enumerate(self.obstacles):
+            min_gx = int(obstacle.x1 / self.grid_size)
+            max_gx = int(obstacle.x2 / self.grid_size)
+            min_gy = int(obstacle.y1 / self.grid_size)
+            max_gy = int(obstacle.y2 / self.grid_size)
+            
+            for gy in range(max(0, min_gy), min(grid_height, max_gy + 1)):
+                for gx in range(max(0, min_gx), min(grid_width, max_gx + 1)):
+                    self.obstacle_grid[gy][gx].append(idx)
+    
+    def _get_obstacles_in_region(self, x1: float, y1: float, x2: float, y2: float) -> Set[int]:
+        """Get obstacle indices that might be in the given region"""
+        min_gx = int(min(x1, x2) / self.grid_size)
+        max_gx = int(max(x1, x2) / self.grid_size)
+        min_gy = int(min(y1, y2) / self.grid_size)
+        max_gy = int(max(y1, y2) / self.grid_size)
+        
+        obstacles = set()
+        grid_height = len(self.obstacle_grid)
+        grid_width = len(self.obstacle_grid[0]) if grid_height > 0 else 0
+        
+        for gy in range(max(0, min_gy), min(grid_height, max_gy + 1)):
+            for gx in range(max(0, min_gx), min(grid_width, max_gx + 1)):
+                obstacles.update(self.obstacle_grid[gy][gx])
+        
+        return obstacles
     
     def _build_visibility_graph(self):
-        """Build a visibility graph connecting all obstacle corners"""
-        # Collect all corner points
+        """Build visibility graph with optimizations"""
+        if self.graph_built:
+            return
+        
+        start_time = time.time()
+        
+        # Collect valid corner points
         corner_points = []
-        for obstacle in self.obstacles:
+        corner_to_obstacle = {}  # Map corner to its obstacle index
+        
+        for obs_idx, obstacle in enumerate(self.obstacles):
             corners = obstacle.get_corners(self.corner_padding)
             for corner in corners:
-                # Only add corners that are within map bounds and not inside any obstacle
                 if (0 <= corner.x <= self.map_width and 
                     0 <= corner.y <= self.map_height and
-                    not self._point_in_any_obstacle(corner)):
+                    not self._point_in_any_obstacle_fast(corner)):
                     corner_points.append(corner)
+                    corner_to_obstacle[corner] = obs_idx
         
-        # Build graph connecting visible corners
+        # Build visibility graph
         self.visibility_graph = defaultdict(list)
         
+        # Optimization: Use distance-based filtering and early termination
+        max_edge_length = 3000  # Maximum edge length to consider
+        
         for i, p1 in enumerate(corner_points):
+            # Find potential neighbors within max distance
+            potential_neighbors = []
+            
             for j, p2 in enumerate(corner_points):
-                if i != j and self._is_path_clear(p1, p2):
-                    distance = p1.distance_to(p2)
-                    self.visibility_graph[p1].append((p2, distance))
+                if i != j:
+                    dist = p1.distance_to(p2)
+                    if dist <= max_edge_length:
+                        potential_neighbors.append((dist, j, p2))
+            
+            # Sort by distance
+            potential_neighbors.sort()
+            
+            # Check visibility for nearby points
+            edges_added = 0
+            max_edges_per_node = 20  # Limit edges per node
+            
+            for dist, j, p2 in potential_neighbors:
+                if edges_added >= max_edges_per_node:
+                    break
+                
+                # Skip if both corners belong to the same obstacle
+                if corner_to_obstacle.get(p1) == corner_to_obstacle.get(p2):
+                    continue
+                
+                if self._is_path_clear_fast(p1, p2):
+                    self.visibility_graph[p1].append((p2, dist))
+                    edges_added += 1
+        
+        self.graph_built = True
+        self.build_time = time.time() - start_time
+        print(f"Visibility graph built in {self.build_time:.2f} seconds")
     
-    def _point_in_any_obstacle(self, point: Point) -> bool:
-        """Check if a point is inside any obstacle"""
-        for obstacle in self.obstacles:
-            if obstacle.contains_point(point.x, point.y):
-                return True
+    def _point_in_any_obstacle_fast(self, point: Point) -> bool:
+        """Fast check if point is in any obstacle"""
+        # Get obstacles in the point's grid cell
+        gx = int(point.x / self.grid_size)
+        gy = int(point.y / self.grid_size)
+        
+        if 0 <= gy < len(self.obstacle_grid) and 0 <= gx < len(self.obstacle_grid[0]):
+            for idx in self.obstacle_grid[gy][gx]:
+                if self.obstacles[idx].contains_point(point.x, point.y):
+                    return True
+        
         return False
     
-    def _is_path_clear(self, p1: Point, p2: Point) -> bool:
-        """Check if a path between two points is clear of obstacles"""
-        for obstacle in self.obstacles:
-            if obstacle.intersects_line(p1, p2):
+    def _is_path_clear_fast(self, p1: Point, p2: Point) -> bool:
+        """Fast check if path between two points is clear"""
+        # Get potential obstacles
+        obstacle_indices = self._get_obstacles_in_region(p1.x, p1.y, p2.x, p2.y)
+        
+        # Check only relevant obstacles
+        for idx in obstacle_indices:
+            if self.obstacles[idx].intersects_line_fast(p1.x, p1.y, p2.x, p2.y):
                 return False
+        
         return True
-    
-    def _find_nearest_clear_point(self, point: Point) -> Point:
-        """Find the nearest clear point if the given point is inside an obstacle"""
-        # Check if point is already clear
-        if not self._point_in_any_obstacle(point):
-            return point
-        
-        # Find which obstacle contains the point
-        containing_obstacle = None
-        for obstacle in self.obstacles:
-            if obstacle.contains_point(point.x, point.y):
-                containing_obstacle = obstacle
-                break
-        
-        if not containing_obstacle:
-            return point
-        
-        # Find the nearest edge of the obstacle
-        edges = [
-            # Top edge
-            (point.x, containing_obstacle.y1 - self.corner_padding),
-            # Bottom edge
-            (point.x, containing_obstacle.y2 + self.corner_padding),
-            # Left edge
-            (containing_obstacle.x1 - self.corner_padding, point.y),
-            # Right edge
-            (containing_obstacle.x2 + self.corner_padding, point.y),
-            # Corners
-            (containing_obstacle.x1 - self.corner_padding, containing_obstacle.y1 - self.corner_padding),
-            (containing_obstacle.x2 + self.corner_padding, containing_obstacle.y1 - self.corner_padding),
-            (containing_obstacle.x1 - self.corner_padding, containing_obstacle.y2 + self.corner_padding),
-            (containing_obstacle.x2 + self.corner_padding, containing_obstacle.y2 + self.corner_padding),
-        ]
-        
-        # Find the nearest clear point
-        best_point = None
-        best_distance = float('inf')
-        
-        for x, y in edges:
-            # Check if point is within map bounds
-            if 0 <= x <= self.map_width and 0 <= y <= self.map_height:
-                test_point = Point(x, y)
-                # Check if point is clear
-                if not self._point_in_any_obstacle(test_point):
-                    distance = point.distance_to(test_point)
-                    if distance < best_distance:
-                        best_distance = distance
-                        best_point = test_point
-        
-        # If we found a clear point, return it; otherwise return original
-        return best_point if best_point else point
     
     def find_path(self, start_x: float, start_y: float, end_x: float, end_y: float) -> List[Tuple[float, float]]:
         """Find the shortest path avoiding obstacles"""
+        # Check cache
+        cache_key = (round(start_x), round(start_y), round(end_x), round(end_y))
+        if cache_key in self.path_cache:
+            return self.path_cache[cache_key]
+        
+        # Build graph if needed
+        if not self.graph_built:
+            self._build_visibility_graph()
+        
         start = Point(start_x, start_y)
         end = Point(end_x, end_y)
         
-        # If start or end points are inside obstacles, move them to the nearest clear position
+        # Adjust points if inside obstacles
         start_clear = self._find_nearest_clear_point(start)
         end_clear = self._find_nearest_clear_point(end)
         
-        # Check if direct path is possible
-        if self._is_path_clear(start_clear, end_clear):
-            return [(start_clear.x, start_clear.y), (end_clear.x, end_clear.y)]
+        # Try direct path first
+        if self._is_path_clear_fast(start_clear, end_clear):
+            result = [(start_clear.x, start_clear.y), (end_clear.x, end_clear.y)]
+        else:
+            # Use A* search
+            path_points = self._astar_search_fast(start_clear, end_clear)
+            
+            if path_points:
+                # Convert to tuples
+                result = [(p.x, p.y) for p in path_points]
+            else:
+                # Fallback to direct path
+                result = [(start.x, start.y), (end.x, end.y)]
         
-        # Use A* algorithm on visibility graph
-        path_points = self._astar_search(start_clear, end_clear)
+        # Cache result
+        if len(self.path_cache) >= self.max_cache_size:
+            self.path_cache.clear()  # Simple cache clearing
+        self.path_cache[cache_key] = result
         
-        if path_points:
-            # Smooth the path
-            smoothed = self._smooth_path(path_points)
-            # Add original start and end points if they were adjusted
-            result = []
-            if start != start_clear:
-                result.append((start.x, start.y))
-            result.extend([(p.x, p.y) for p in smoothed])
-            if end != end_clear:
-                result.append((end.x, end.y))
-            return result
-        
-        # If no path found, return direct path as fallback
-        return [(start.x, start.y), (end.x, end.y)]
+        return result
     
-    def _astar_search(self, start: Point, goal: Point) -> List[Point]:
-        """A* search algorithm on visibility graph"""
-        # Create temporary graph including start and goal
-        temp_graph = defaultdict(list, self.visibility_graph)
+    def _find_nearest_clear_point(self, point: Point) -> Point:
+        """Find nearest clear point if inside obstacle"""
+        if not self._point_in_any_obstacle_fast(point):
+            return point
         
-        # Add connections from start to visible corners
+        # Find containing obstacle
+        gx = int(point.x / self.grid_size)
+        gy = int(point.y / self.grid_size)
+        
+        if 0 <= gy < len(self.obstacle_grid) and 0 <= gx < len(self.obstacle_grid[0]):
+            for idx in self.obstacle_grid[gy][gx]:
+                obstacle = self.obstacles[idx]
+                if obstacle.contains_point(point.x, point.y):
+                    # Find nearest edge
+                    edges = [
+                        (point.x, obstacle.y1 - self.corner_padding),
+                        (point.x, obstacle.y2 + self.corner_padding),
+                        (obstacle.x1 - self.corner_padding, point.y),
+                        (obstacle.x2 + self.corner_padding, point.y)
+                    ]
+                    
+                    best_point = point
+                    best_dist = float('inf')
+                    
+                    for x, y in edges:
+                        if 0 <= x <= self.map_width and 0 <= y <= self.map_height:
+                            test_point = Point(x, y)
+                            if not self._point_in_any_obstacle_fast(test_point):
+                                dist = point.distance_to(test_point)
+                                if dist < best_dist:
+                                    best_dist = dist
+                                    best_point = test_point
+                    
+                    return best_point
+        
+        return point
+    
+    def _astar_search_fast(self, start: Point, goal: Point) -> List[Point]:
+        """Fast A* search implementation"""
+        # Early exit for direct path
+        if self._is_path_clear_fast(start, goal):
+            return [start, goal]
+        
+        # Find connections from start and goal
+        start_neighbors = []
+        goal_neighbors = []
+        
+        # Limit search to nearby corners
+        max_connection_dist = 2000
+        
         for corner in self.visibility_graph.keys():
-            if self._is_path_clear(start, corner):
-                distance = start.distance_to(corner)
-                temp_graph[start].append((corner, distance))
-                temp_graph[corner].append((start, distance))
+            dist_to_start = start.distance_to(corner)
+            if dist_to_start <= max_connection_dist and self._is_path_clear_fast(start, corner):
+                start_neighbors.append((corner, dist_to_start))
+            
+            dist_to_goal = corner.distance_to(goal)
+            if dist_to_goal <= max_connection_dist and self._is_path_clear_fast(corner, goal):
+                goal_neighbors.append((corner, dist_to_goal))
         
-        # Add connections from goal to visible corners
-        for corner in self.visibility_graph.keys():
-            if self._is_path_clear(goal, corner):
-                distance = goal.distance_to(corner)
-                temp_graph[goal].append((corner, distance))
-                temp_graph[corner].append((goal, distance))
-        
-        # Add direct connection if possible
-        if self._is_path_clear(start, goal):
-            distance = start.distance_to(goal)
-            temp_graph[start].append((goal, distance))
-        
-        # A* algorithm with counter for tie-breaking
+        # A* search
         counter = 0
         open_set = [(0, counter, start)]
         came_from = {}
         g_score = {start: 0}
-        f_score = {start: start.distance_to(goal)}
         
         while open_set:
-            current_f, _, current = heapq.heappop(open_set)
+            _, _, current = heapq.heappop(open_set)
             
             if current == goal:
                 # Reconstruct path
@@ -726,42 +811,31 @@ class ObstaclePathfinder:
                 path.reverse()
                 return path
             
-            for neighbor, distance in temp_graph[current]:
+            # Get neighbors
+            if current == start:
+                neighbors = start_neighbors
+            elif current in self.visibility_graph:
+                neighbors = list(self.visibility_graph[current])
+                # Check goal connection
+                if self._is_path_clear_fast(current, goal):
+                    neighbors.append((goal, current.distance_to(goal)))
+            else:
+                neighbors = []
+            
+            for neighbor, distance in neighbors:
                 tentative_g = g_score[current] + distance
                 
                 if neighbor not in g_score or tentative_g < g_score[neighbor]:
                     came_from[neighbor] = current
                     g_score[neighbor] = tentative_g
-                    f_score[neighbor] = tentative_g + neighbor.distance_to(goal)
+                    f_score = tentative_g + neighbor.distance_to(goal)
                     counter += 1
-                    heapq.heappush(open_set, (f_score[neighbor], counter, neighbor))
+                    heapq.heappush(open_set, (f_score, counter, neighbor))
         
         return []  # No path found
     
-    def _smooth_path(self, path: List[Point]) -> List[Point]:
-        """Smooth the path by removing unnecessary waypoints"""
-        if len(path) <= 2:
-            return path
-        
-        smoothed = [path[0]]
-        i = 0
-        
-        while i < len(path) - 1:
-            # Try to skip ahead as far as possible
-            j = len(path) - 1
-            while j > i + 1:
-                if self._is_path_clear(path[i], path[j]):
-                    break
-                j -= 1
-            
-            smoothed.append(path[j])
-            i = j
-        
-        return smoothed
-    
     def visualize_path(self, path: List[Tuple[float, float]], output_file: str = "path_debug.png"):
-        """Visualize the path and obstacles for debugging"""
-        # Create a white image
+        """Visualize the path and obstacles"""
         img = Image.new('RGB', (self.map_width, self.map_height), 'white')
         draw = ImageDraw.Draw(img)
         
@@ -780,21 +854,6 @@ class ObstaclePathfinder:
                 outline='black',
                 width=2
             )
-            
-            # Draw obstacle name
-            cx = (obstacle.x1 + obstacle.x2) / 2
-            cy = (obstacle.y1 + obstacle.y2) / 2
-            draw.text((cx, cy), obstacle.name, fill='black', anchor='mm')
-        
-        # Draw visibility graph (optional, for debugging)
-        if self.visibility_graph:
-            for point, neighbors in self.visibility_graph.items():
-                for neighbor, _ in neighbors:
-                    draw.line(
-                        [(point.x, point.y), (neighbor.x, neighbor.y)],
-                        fill='lightgray',
-                        width=1
-                    )
         
         # Draw path
         if len(path) > 1:
@@ -804,70 +863,28 @@ class ObstaclePathfinder:
                     fill='blue',
                     width=3
                 )
-            
-            # Draw waypoints
-            for point in path:
-                draw.ellipse(
-                    [point[0] - 5, point[1] - 5, point[0] + 5, point[1] + 5],
-                    fill='red',
-                    outline='darkred'
-                )
         
         img.save(output_file)
         return output_file
     
-    def get_booth_location(self, booth_name: str) -> Tuple[float, float]:
+    def get_booth_location(self, booth_name: str) -> Optional[Tuple[float, float]]:
         """Get the location of a booth by name"""
         booth_name_lower = booth_name.lower()
         
-        # First try exact match (case-insensitive)
         for obstacle in self.obstacles:
             if obstacle.category == 'booth' and obstacle.name.lower() == booth_name_lower:
-                # Return center of booth
                 cx = (obstacle.x1 + obstacle.x2) / 2
                 cy = (obstacle.y1 + obstacle.y2) / 2
                 return (cx, cy)
         
-        # Try partial match - prioritize matches at the beginning
-        best_match = None
-        best_match_score = float('inf')
-        
+        # Try partial match
         for obstacle in self.obstacles:
-            if obstacle.category == 'booth':
-                obstacle_name_lower = obstacle.name.lower()
-                if booth_name_lower in obstacle_name_lower:
-                    # Score based on position of match (lower is better)
-                    score = obstacle_name_lower.find(booth_name_lower)
-                    if score < best_match_score:
-                        best_match = obstacle
-                        best_match_score = score
+            if obstacle.category == 'booth' and booth_name_lower in obstacle.name.lower():
+                cx = (obstacle.x1 + obstacle.x2) / 2
+                cy = (obstacle.y1 + obstacle.y2) / 2
+                return (cx, cy)
         
-        if best_match:
-            cx = (best_match.x1 + best_match.x2) / 2
-            cy = (best_match.y1 + best_match.y2) / 2
-            return (cx, cy)
-        
-        return None
-
-def create_navigation_grid(width: int, height: int, obstacles: List[Rectangle], 
-                         grid_size: int = 10) -> np.ndarray:
-    """Create a navigation grid for alternative pathfinding"""
-    # Create grid (1 = walkable, 0 = obstacle)
-    grid_width = width // grid_size
-    grid_height = height // grid_size
-    grid = np.ones((grid_height, grid_width), dtype=np.uint8)
-    
-    # Mark obstacles in grid
-    for obstacle in obstacles:
-        x1 = max(0, int(obstacle.x1 // grid_size))
-        y1 = max(0, int(obstacle.y1 // grid_size))
-        x2 = min(grid_width - 1, int(obstacle.x2 // grid_size))
-        y2 = min(grid_height - 1, int(obstacle.y2 // grid_size))
-        
-        grid[y1:y2+1, x1:x2+1] = 0
-    
-    return grid
-
+        return None 
 
 class CreateBoothMap(Tool):
     
@@ -964,7 +981,7 @@ class CreateBoothMap(Tool):
             current_dir = os.path.dirname(os.path.abspath(__file__))
             map_image = os.path.join(current_dir, "vtex_day_map.png")
 
-            navigator = BoothNavigatorObstacles(obstacles_file=obstacles_file, map_image=map_image)
+            navigator = FastBoothNavigator(obstacles_file=obstacles_file, map_image=map_image)
             img_bytes, path_names = navigator.draw_route(
                     from_location,
                     to_location,
