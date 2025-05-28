@@ -30,7 +30,7 @@ class GenerateImage(Tool):
         response = requests.post(url, headers=headers, json=data)
          
         if response.status_code == 201:
-            return {"response": f"The image creation will start now."}, response.status_code
+            return {"response": f"The image creation was started. Thank your for asking."}, response.status_code
         else:
             print(f"Error response: {response.json()}")
             return {"response": f"Failed to start image generation, try again later"}, response.status_code
