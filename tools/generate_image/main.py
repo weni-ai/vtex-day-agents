@@ -7,8 +7,8 @@ import json
 
 class GenerateImage(Tool):
     def execute(self, context: Context) -> TextResponse:
-        sponsors_data = self.generate_image()
-        return TextResponse(data=sponsors_data)
+        generate = self.generate_image()
+        return TextResponse(data=generate)
 
     def generate_image(self):
         url = "https://flows.weni.ai/api/v2/flow_starts.json"
