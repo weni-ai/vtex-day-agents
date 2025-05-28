@@ -6,7 +6,6 @@ import json
 import pytz
 from datetime import datetime
 
-
 class GetAgenda(Tool):
     def execute(self, context: Context) -> TextResponse:
         agenda_data = self.get_vtex_day_agenda()
@@ -24,40 +23,32 @@ class GetAgenda(Tool):
         }
         
         response = requests.get(url, headers=headers)
-        
-        # Aplica a conversão para horário de Brasília
-        agenda_data = self.process_agenda_data(agenda_data)
-        
+
         if response.status_code == 200:
-            print(response.json())
-            return response.json()
+            agenda_data = response.json()  # Pega os dados da resposta
+            agenda_data = self.process_agenda_data(agenda_data)  # Processa os dados (ex: converter horários)
+            return agenda_data
         else:
             return {"error": f"Failed to fetch agenda: {response.status_code}"}
-        
-    
-    def process_agenda_data(agenda_data):
+
+    def process_agenda_data(self, agenda_data):
         for event in agenda_data:
-            # Converte o horário de início (date) e o horário de término (endDate)
-            if 'date' in event['fields']:
-                event['fields']['date_brasilia'] = convert_utc_to_brasilia(event['fields']['date']['timestampValue'])
-            
-            if 'endDate' in event['fields']:
-                event['fields']['endDate_brasilia'] = convert_utc_to_brasilia(event['fields']['endDate']['timestampValue'])
-        
+            fields = event.get('fields', {})
+            if 'date' in fields:
+                fields['date_brasilia'] = self.convert_utc_to_brasilia(fields['date']['timestampValue'])
+            if 'endDate' in fields:
+                fields['endDate_brasilia'] = self.convert_utc_to_brasilia(fields['endDate']['timestampValue'])
         return agenda_data
     
-    def convert_utc_to_brasilia(utc_time_str):
+    def convert_utc_to_brasilia(self, utc_time_str):
         brasilia_tz = pytz.timezone('America/Sao_Paulo')
+        try:
+            # Tenta com microssegundos
+            utc_time = datetime.strptime(utc_time_str, '%Y-%m-%dT%H:%M:%S.%fZ')
+        except ValueError:
+            # Caso não tenha microssegundos, tenta sem
+            utc_time = datetime.strptime(utc_time_str, '%Y-%m-%dT%H:%M:%SZ')
         
-        # Converte a string UTC para datetime
-        utc_time = datetime.strptime(utc_time_str, '%Y-%m-%dT%H:%M:%S.%fZ')
-        
-        # Atribui o fuso horário UTC
         utc_time = pytz.utc.localize(utc_time)
-        
-        # Converte para o horário de Brasília
         brasilia_time = utc_time.astimezone(brasilia_tz)
-        
-        # Retorna o horário no formato desejado
         return brasilia_time.strftime('%Y-%m-%d %H:%M:%S')
-    
