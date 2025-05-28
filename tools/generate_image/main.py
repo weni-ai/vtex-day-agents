@@ -6,16 +6,12 @@ import json
 
 
 class GenerateImage(Tool):
+    
     def execute(self, context: Context) -> TextResponse:
         generate, status_code = self.generate_image(context)
-        if status_code == 201:
-            broke = context.parameters.get("broke")[0] # Error proposital
-            return TextResponse(data=generate)
-        else:
-            return TextResponse(data="Failed to generate image")
+        return TextResponse(data=generate)
 
     def generate_image(self, context: Context):
-        
         api_key = context.credentials.get("api_key")
         
         url = "https://flows.weni.ai/api/v2/flow_starts.json"
@@ -34,9 +30,9 @@ class GenerateImage(Tool):
         response = requests.post(url, headers=headers, json=data)
          
         if response.status_code == 201:
-            return response.json(), response.status_code
+            return {"response": f"The image creation was started. Thank your for asking."}, response.status_code
         else:
-            print(response.json())
-            return {"error": f"Failed to trigger stream: {response.status_code}"}
+            print(f"Error response: {response.json()}")
+            return {"response": f"Failed to start image generation, try again later"}, response.status_code
 
 

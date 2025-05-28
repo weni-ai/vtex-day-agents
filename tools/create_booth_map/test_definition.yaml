@@ -1,0 +1,19 @@
+tests:
+    test_1:
+        parameters:
+            starting_location: "weni by vtex"
+            destination_location: "aws"
+            contact_id: "test_contact_123"
+            project_uuid: "test-project-uuid-456"
+    test_2:
+        parameters:
+            starting_location: "microsoft"
+            destination_location: "google"
+            contact_id: "test_contact_789"
+            project_uuid: "test-project-uuid-456"
+    test_3:
+        parameters:
+            starting_location: "salesforce"
+            destination_location: "oracle"
+            contact_id: "test_contact_abc"
+            project_uuid: "test-project-uuid-456"

@@ -8,7 +8,8 @@ import json
 class Getspeakers(Tool):
     def execute(self, context: Context) -> TextResponse:
         speakers_data = self.get_vtex_palestrantes()
-        return TextResponse(data=speakers_data)
+        formatted_data = self.format_speakers_data(speakers_data)
+        return TextResponse(data=formatted_data)
 
     def get_vtex_palestrantes(self):
         url = "https://api.coodefy.dev/v1/vtex_palestrantes"
@@ -24,4 +25,23 @@ class Getspeakers(Tool):
         if response.status_code == 200:
             return response.json()
         else:
-            return {"error": f"Failed to fetch palestrantes: {response.status_code}"} 
+            return {"error": f"Failed to fetch palestrantes: {response.status_code}"}
+
+    def format_speakers_data(self, raw_data):
+        """Format the speakers data to return only name, description, role, and highlight"""
+        if isinstance(raw_data, dict) and "error" in raw_data:
+            return raw_data
+        
+        formatted_speakers = []
+        for speaker in raw_data:
+            if "fields" in speaker:
+                fields = speaker["fields"]
+                formatted_speaker = {
+                    "name": fields.get("name", {}).get("stringValue", ""),
+                    "description": fields.get("description", {}).get("stringValue", ""),
+                    "role": fields.get("role", {}).get("stringValue", ""),
+                    "highlight": fields.get("highlight", {}).get("booleanValue", False)
+                }
+                formatted_speakers.append(formatted_speaker)
+        
+        return formatted_speakers 
