@@ -46,3 +46,15 @@ agents:
                         description: "Optional search term to filter sponsors"
                         type: "string"
                         required: false
+            - generate_image:
+                name: "Generate Image"
+                source:
+                    path: "tools/generate_image"
+                    entrypoint: "main.GenerateImage"
+                    path_test: "test_definition.yaml"
+                description: "Use this tool when the user asks to generate an image."
+                parameters:
+                    - image_url:
+                        description: "..."
+                        type: "string"
+                        required: false
