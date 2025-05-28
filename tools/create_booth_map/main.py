@@ -442,6 +442,24 @@ class Point:
     def __eq__(self, other):
         return self.x == other.x and self.y == other.y
     
+    def __lt__(self, other):
+        """Less than comparison for heapq - compare by x first, then y"""
+        if self.x != other.x:
+            return self.x < other.x
+        return self.y < other.y
+    
+    def __le__(self, other):
+        """Less than or equal comparison"""
+        return self == other or self < other
+    
+    def __gt__(self, other):
+        """Greater than comparison"""
+        return not self <= other
+    
+    def __ge__(self, other):
+        """Greater than or equal comparison"""
+        return not self < other
+    
     def distance_to(self, other):
         return sqrt((self.x - other.x)**2 + (self.y - other.y)**2)
 
@@ -688,14 +706,15 @@ class ObstaclePathfinder:
             distance = start.distance_to(goal)
             temp_graph[start].append((goal, distance))
         
-        # A* algorithm
-        open_set = [(0, start)]
+        # A* algorithm with counter for tie-breaking
+        counter = 0
+        open_set = [(0, counter, start)]
         came_from = {}
         g_score = {start: 0}
         f_score = {start: start.distance_to(goal)}
         
         while open_set:
-            current_f, current = heapq.heappop(open_set)
+            current_f, _, current = heapq.heappop(open_set)
             
             if current == goal:
                 # Reconstruct path
@@ -714,7 +733,8 @@ class ObstaclePathfinder:
                     came_from[neighbor] = current
                     g_score[neighbor] = tentative_g
                     f_score[neighbor] = tentative_g + neighbor.distance_to(goal)
-                    heapq.heappush(open_set, (f_score[neighbor], neighbor))
+                    counter += 1
+                    heapq.heappush(open_set, (f_score[neighbor], counter, neighbor))
         
         return []  # No path found
     
