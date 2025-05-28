@@ -3,6 +3,8 @@ from weni.context import Context
 from weni.responses import TextResponse
 import requests
 import json
+import pytz
+from datetime import datetime
 
 
 class GetAgenda(Tool):
@@ -22,8 +24,40 @@ class GetAgenda(Tool):
         }
         
         response = requests.get(url, headers=headers)
+        
+        # Aplica a conversão para horário de Brasília
+        agenda_data = self.process_agenda_data(agenda_data)
+        
         if response.status_code == 200:
             print(response.json())
             return response.json()
         else:
             return {"error": f"Failed to fetch agenda: {response.status_code}"}
+        
+    
+    def process_agenda_data(agenda_data):
+        for event in agenda_data:
+            # Converte o horário de início (date) e o horário de término (endDate)
+            if 'date' in event['fields']:
+                event['fields']['date_brasilia'] = convert_utc_to_brasilia(event['fields']['date']['timestampValue'])
+            
+            if 'endDate' in event['fields']:
+                event['fields']['endDate_brasilia'] = convert_utc_to_brasilia(event['fields']['endDate']['timestampValue'])
+        
+        return agenda_data
+    
+    def convert_utc_to_brasilia(utc_time_str):
+        brasilia_tz = pytz.timezone('America/Sao_Paulo')
+        
+        # Converte a string UTC para datetime
+        utc_time = datetime.strptime(utc_time_str, '%Y-%m-%dT%H:%M:%S.%fZ')
+        
+        # Atribui o fuso horário UTC
+        utc_time = pytz.utc.localize(utc_time)
+        
+        # Converte para o horário de Brasília
+        brasilia_time = utc_time.astimezone(brasilia_tz)
+        
+        # Retorna o horário no formato desejado
+        return brasilia_time.strftime('%Y-%m-%d %H:%M:%S')
+    

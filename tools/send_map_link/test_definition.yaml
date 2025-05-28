@@ -1,0 +1,7 @@
+tests:
+    test_1:
+        parameters: {}
+    test_2:
+        parameters: {}
+    test_3:
+        parameters: {} 
