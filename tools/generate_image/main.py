@@ -7,19 +7,20 @@ import json
 
 class GenerateImage(Tool):
     def execute(self, context: Context) -> TextResponse:
-        generate = self.generate_image()
+        generate = self.generate_image(context)
         return TextResponse(data=generate)
 
-    def generate_image(self):
+    def generate_image(self, context: Context):
         
-        api_key = Context.get_credential("API_KEY")
+        api_key = context.credentials.get("api_key")
         
         url = "https://flows.weni.ai/api/v2/flow_starts.json"
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"{api_key}",  # Push API token
+            "Authorization": f"Token {api_key}",  # Push API token
         }
-        numero_disparo = Context.contact.get("urn")
+        #numero_disparo = Context.contact.get("urn")
+        numero_disparo = 558599854658
         
         data = {
             "flow": "8cb9d2d6-c3be-44bb-960f-df3cdbe18d0a",  # ID do fluxo
