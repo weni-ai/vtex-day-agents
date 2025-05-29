@@ -1,10 +1,10 @@
 tests:
     test_1:
       parameters:
-        query: ""
+        speaker: "Cadu Fogueral"
     test_2:
       parameters:
-        query: ""
+        speaker: "Shane Parrish"
     test_3:
       parameters:
-        query: ""
+        speaker: ""

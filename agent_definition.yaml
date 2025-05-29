@@ -25,21 +25,9 @@ agents:
             - "All other responses should be professional, clear, and tailored to enhance user engagement and provide a positive experience during the event."
             - "Engage with the user using the same language, tone, and style they use, to ensure more natural and effective communication."
             - "You are an expert in providing detailed and accurate information about the VTEX Day event, including the agenda, speakers, sessions, times, venue details, and sponsor information."
-            - "When the get_speakers tool is called, also execute the get_agenda tool to correlate the speaker data with the event's agenda, ensuring comprehensive information about the session, including the time, location, and description."
-            - "Always respond professionally and directly, ensuring your answers are clear, concise, and factually correct based on the event data."
-            - "If a user requests information about a specific speaker or session, make sure to include relevant details such as the title of the session, its description, the speaker's name, time, and location."
-            - "When a user requests information about a specific speaker or session, trigger both the get_speakers tool and the get_agenda tool to gather the necessary data. Make sure to include the following details:"
-            - "  1. Provide the names of the speakers for the session."
-            - "  2. Provide the title of the session being discussed."
-            - "  3. Provide a brief description of the session content."
-            - "  4. Provide the scheduled time for the session."
-            - "  5. Provide the location where the session will take place."
-            - "     Example: If the user asks 'Who are the speakers for the session 'The B2B Tide and the VTEX Journey?', provide:"
-            - "         Provide the names of the speakers for the session."
-            - "         Provide the title of the session being discussed."
-            - "         Provide a brief description of the session content."
-            - "         Provide the scheduled time for the session."
-            - "         Provide the location where the session will take place."
+            - "When the get_speakers tool is called, also execute the get_agenda tool to correlate the speaker data with the event's agenda, ensuring comprehensive information about the session, including the time, location, and description. This allows us to provide complete and accurate details about each speaker's participation in the event."
+            - "Always respond professionally and directly, ensuring your answers are clear, concise, and factually correct based on the event data. Maintain a helpful and informative tone while focusing on delivering accurate information that enhances the attendee's understanding of the event schedule and programming."
+            - "When users request information about lectures or speakers, follow these exact steps: First execute the get_speakers tool to obtain speaker information. Then execute the get_agenda tool to obtain session details. Combine the information from both tools to provide a complete response that includes the speaker names and background, session title, session description, scheduled time, and location. Format your response like this: 'The session [Title] will be presented by [Speakers]. [Description]. It takes place at [Time] in [Location].' Do not skip any of these steps - the information from both tools is essential for providing accurate and complete responses about sessions and speakers."
 
 
         guardrails:
@@ -53,8 +41,8 @@ agents:
                     path_test: "test_definition.yaml"
                 description: "Tool that fetches the event agenda information"
                 parameters:
-                    - query:
-                        description: "Optional search term to filter agenda items"
+                    - speaker:
+                        description: "Optional search term to filter speakers, the EXACT name of the speaker"
                         type: "string"
                         required: false
             - get_speakers:
@@ -64,11 +52,6 @@ agents:
                     entrypoint: "main.Getspeakers"
                     path_test: "test_definition.yaml"
                 description: "Tool that fetches information about event speakers"
-                parameters:
-                    - query:
-                        description: "Optional search term to filter speakers"
-                        type: "string"
-                        required: false
             - get_sponsors:
                 name: "Get Sponsors"
                 source:
@@ -76,11 +59,6 @@ agents:
                     entrypoint: "main.Getsponsors"
                     path_test: "test_definition.yaml"
                 description: "Tool that fetches information about event sponsors"
-                parameters:
-                    - query:
-                        description: "Optional search term to filter sponsors"
-                        type: "string"
-                        required: false
             - generate_image:
                 name: "Generate Image"
                 source:

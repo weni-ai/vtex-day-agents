@@ -8,7 +8,7 @@ import json
 class Getspeakers(Tool):
     def execute(self, context: Context) -> TextResponse:
         speakers_data = self.get_vtex_palestrantes()
-        formatted_data = self.format_speakers_data(speakers_data)
+        formatted_data = self.format_speakers_data(speakers_data, context)
         return TextResponse(data=formatted_data)
 
     def get_vtex_palestrantes(self):
@@ -27,11 +27,12 @@ class Getspeakers(Tool):
         else:
             return {"error": f"Failed to fetch palestrantes: {response.status_code}"}
 
-    def format_speakers_data(self, raw_data):
+    def format_speakers_data(self, raw_data, context: Context):
         """Format the speakers data to return only name, description, role, and highlight"""
         if isinstance(raw_data, dict) and "error" in raw_data:
             return raw_data
         
+        speaker = context.parameters.get("speaker")
         formatted_speakers = []
         for speaker in raw_data:
             if "fields" in speaker:
