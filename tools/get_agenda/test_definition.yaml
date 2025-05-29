@@ -2,9 +2,3 @@ tests:
     test_1:
       parameters:
         query: ""
-    test_2:
-      parameters:
-        query: ""
-    test_3:
-      parameters:
-        query: ""

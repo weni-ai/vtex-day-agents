@@ -25,21 +25,31 @@ class Getsponsors(Tool):
             data = response.json()
             return self.filter_sponsors(data)
         else:
-            return {"error": f"Failed to fetch sponsors: {response.status_code}"} 
+            return {"error": f"Failed to fetch sponsors: {response.status_code}"}
         
-    
     def filter_sponsors(self, data):
         filtered_sponsors = []
 
-        sponsors_list = data[0] if isinstance(data, list) and len(data) > 0 else data
+        # Verifica se a estrutura de dados está correta (assumindo que é uma lista)
+        if isinstance(data, list) and len(data) > 0:
+            sponsors_list = data
+        else:
+            return {"error": "Data is not in expected format or empty."}
 
+        # Itera sobre cada patrocinador e tenta acessar as informações esperadas
         for sponsor in sponsors_list:
-            fields = sponsor.get("fields", {})
-            nome = fields.get("nome", {}).get("stringValue", "")
-            categoria = fields.get("categoria", {}).get("stringValue", "")
-            filtered_sponsors.append({
-                "nome": nome,
-                "categoria": categoria
-            })
+            # Verifica se o patrocinador possui os campos esperados
+            if isinstance(sponsor, dict) and 'fields' in sponsor:
+                fields = sponsor.get("fields", {})
+                nome = fields.get("nome", {}).get("stringValue", "")
+                categoria = fields.get("categoria", {}).get("stringValue", "")
+                filtered_sponsors.append({
+                    "nome": nome,
+                    "categoria": categoria
+                })
+            else:
+                filtered_sponsors.append({
+                    "error": "Invalid data for sponsor."
+                })
 
         return filtered_sponsors
