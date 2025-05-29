@@ -1,0 +1,21 @@
+tests:
+    test_1:
+        parameters:
+            start_date: "01/01/2024"
+            end_date: "31/12/2024"
+    test_2:
+        parameters:
+            start_date: "2024-06-15"
+            end_date: "2024-06-20"
+    test_3:
+        parameters:
+            start_date: "2023-12-25 10:00:00"
+            end_date: "2024-01-01 00:00:00"
+    test_4:
+        parameters:
+            start_date: "15/03/2024 14:30:00"
+            end_date: "15/03/2024 18:45:30"
+    test_5:
+        parameters:
+            start_date: "2024-12-31"
+            end_date: "2024-01-01" 

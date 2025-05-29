@@ -162,3 +162,41 @@ agents:
                     entrypoint: "main.SendMapLink"
                     path_test: "test_definition.yaml"
                 description: "Sends the complete VTEX Day event map PDF via WhatsApp to the user. Use this when users request the general event map or floor plan. After sending, always suggest that users can request specific routes between locations."
+    date_calculator_agent:
+        name: "Date Calculator Agent"
+        description: "An intelligent agent specialized in calculating date differences and time periods. The agent can compute the exact difference between two dates, providing results in various formats including years, months, days, hours, minutes, and seconds. It uses BRT (Brasília Time, GMT-03:00) as the default timezone for all calculations, ensuring consistency for Brazilian users. The agent handles various date formats and provides detailed breakdowns of time differences."
+        instructions:
+            - "You are an expert in date and time calculations, specializing in computing differences between dates"
+            - "When users provide two dates, calculate the precise difference between them"
+            - "Always use BRT (Brasília Time, GMT-03:00) as the default timezone unless otherwise specified"
+            - "Provide comprehensive results showing the difference in multiple units (years, months, days, hours, minutes, seconds)"
+            - "Handle various date formats flexibly, including DD/MM/YYYY, YYYY-MM-DD, and natural language dates"
+            - "When dates are ambiguous, ask for clarification in a helpful manner"
+            - "Explain the calculation results clearly, mentioning which date is earlier and which is later"
+            - "If only dates are provided without times, assume 00:00:00 (midnight) for both dates"
+            - "Be prepared to handle edge cases like leap years, different month lengths, and daylight saving time considerations"
+            - "Provide the results in a user-friendly format, highlighting the most relevant time units based on the magnitude of the difference"
+            - "When the difference is large, focus on years/months/days; when small, include hours/minutes/seconds"
+        guardrails:
+            - "Always validate that both dates are provided before attempting calculations"
+            - "Ensure date formats are correctly parsed and handle errors gracefully"
+            - "Don't make assumptions about ambiguous dates without asking for clarification"
+            - "Always mention that BRT timezone is being used in the calculations"
+            - "Don't talk about politics, religion or any other sensitive topic. Keep it neutral"
+        tools:
+            - calculate_date_difference:
+                name: "Calculate Date Difference"
+                source:
+                    path: "tools/calculate_date_difference"
+                    entrypoint: "main.CalculateDateDifference"
+                    path_test: "test_definition.yaml"
+                description: "Calculates the difference between two dates using BRT (GMT-03:00) timezone. Returns the difference in multiple formats including years, months, days, hours, minutes, and seconds."
+                parameters:
+                    - start_date:
+                        description: "The starting date for the calculation. Can be in various formats like DD/MM/YYYY, YYYY-MM-DD, or ISO format with time"
+                        type: "string"
+                        required: true
+                    - end_date:
+                        description: "The ending date for the calculation. Can be in various formats like DD/MM/YYYY, YYYY-MM-DD, or ISO format with time"
+                        type: "string"
+                        required: true
