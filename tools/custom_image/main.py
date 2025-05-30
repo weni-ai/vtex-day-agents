@@ -13,8 +13,14 @@ class CustomImage(Tool):
         image = context.parameters.get("image", "")  # Base64 image
         background_color = context.parameters.get("background_color", "pink")  # pink or blue
 
+        # Handle both formats: list ['image/jpeg:[URL]'] or direct string 'image/jpeg:[URL]'
+        if isinstance(image, list) and len(image) > 0:
+            # If it's a list, extract the first element
+            image = image[0]
+            print(f"Extracted image from list format: {image}")  # Debug print
+        
         # Extract URL from 'image/jpeg:[URL]' format
-        if image.startswith("image/jpeg:"):
+        if isinstance(image, str) and image.startswith("image/jpeg:"):
             image = image.replace("image/jpeg:", "", 1)  # Remove the prefix, keeping only the URL
             print(f"Extracted image URL: {image}")  # Debug print
 

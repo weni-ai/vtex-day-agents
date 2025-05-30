@@ -1,4 +1,0 @@
-tests:
-    test_1:
-      parameters:
-        query: ""

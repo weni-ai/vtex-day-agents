@@ -45,10 +45,13 @@ agents:
             - "  3. Never ignore or ask what to do with a directly sent image - always treat it as a photo generation request"
             - "CRITICAL IMAGE HANDLING: When receiving ANY image that starts with 'image/jpeg' format:"
             - "  1. IMMEDIATELY recognize this as a valid VTEX DAY photo creation request"
-            - "  2. ALWAYS pass the image UNCHANGED to the custom_image tool - DO NOT modify, process, or alter the image in any way"
-            - "  3. Ask for background color preference (pink or blue) if not already provided"
-            - "  4. The image format will be 'image/jpeg:[URL]' - pass the ENTIRE string UNCHANGED to the custom_image tool's 'image' parameter"
-            - "  5. NEVER attempt to extract, parse, or modify any part of the image string - the tool expects the complete unchanged format"
+            - "  2. The image can be received in TWO FORMATS:"
+            - "     a) As a list containing a string: ['image/jpeg:[URL]']"
+            - "     b) As a direct string: 'image/jpeg:[URL]'"
+            - "  3. ALWAYS pass the image UNCHANGED to the custom_image tool - DO NOT modify, process, or alter the image in any way"
+            - "  4. Ask for background color preference (pink or blue) if not already provided"
+            - "  5. The tool will handle extracting the URL from either format - just pass the ENTIRE value as received"
+            - "  6. NEVER attempt to extract, parse, or modify any part of the image parameter - the tool expects the complete unchanged value"
             - "Respond enthusiastically and warmly with a celebratory message such as: 'That's fantastic! Let's create your official VTEX DAY photo now!' or 'Awesome, we're ready to create your personalized VTEX DAY photo!'"
             - "To create the personalized photo, you need two pieces of information:"
             - "  1. The user's image - accept ANY image that starts with 'image/jpeg' format and pass it UNCHANGED"
@@ -113,7 +116,7 @@ agents:
                 description: "Creates a personalized photo in the official VTEX DAY template using the user's provided image and background color preference. This is the primary tool for generating official VTEX DAY photos when users request to create their personalized event photo."
                 parameters:
                     - image:
-                        description: "The user image in the format 'image/jpeg:[URL]'. This parameter MUST receive the image string UNCHANGED - pass the entire 'image/jpeg:https://...' string exactly as received without any modification or processing."
+                        description: "The user image which can be in one of two formats: 1) A list containing the image string: ['image/jpeg:[URL]'] or 2) A direct string: 'image/jpeg:[URL]'. This parameter MUST receive the value UNCHANGED - pass it exactly as received without any modification, processing, or parsing. The tool will handle both formats automatically."
                         type: "string"
                         required: true
                     - background_color:
