@@ -36,16 +36,19 @@ class CustomImage(Tool):
                 "details": "Failed to generate custom image"
             })
 
-    def compose_image(self, image: str, background_color: str) -> str:
+    def compose_image(self, image: str, background_color: str, context: Context) -> str:
         """
         Call the image composition API to create the VTEX DAY template image
         """
         url = "https://weni.ai/wp-json/composer/v1/compose"
         
+        api_image_key = context.credentials.get("api_image_key", "")
+        
         headers = {
             "Content-Type": "application/json",
-            "Authorization": "Bearer 47672c7a04fe46abdc2594604ac1f4bf90b6d84793616d327e2a5ec0550046f4"
+            "Authorization": f"Bearer {api_image_key}"
         }
+        
 
         if background_color.upper() == "BLUE":
             template = "image/jpeg:https://push-ilha-sp-push-media-prod.s3.sa-east-1.amazonaws.com/media/21385/757c/e900/757ce900-4ea3-4e4c-bf1f-3561fa6a959a.jpg"
