@@ -42,17 +42,31 @@ class GetAgenda(Tool):
         for event in raw_data:
             if "fields" in event:
                 fields = event["fields"]
-                speakers = fields.get("palestrantes_names", {}).get("stringValue", "")
+                speakers_string = fields.get("palestrantes_names", {}).get("stringValue", "")
+                
+                # Split the speakers string by comma and strip whitespace
+                speakers_list = [speaker.strip() for speaker in speakers_string.split(",") if speaker.strip()]
 
-                # Se o nome do palestrante for vazio ou se o nome do palestrante corresponder ao solicitado, formate o evento
-                if not speaker_name or speaker_name in speakers:
+                # Check if we should include this event
+                include_event = False
+                if not speaker_name:
+                    # If no speaker filter is provided, include all events
+                    include_event = True
+                else:
+                    # Check if the speaker_name matches any of the speakers (case-insensitive partial match)
+                    for speaker in speakers_list:
+                        if speaker_name.lower() in speaker.lower():
+                            include_event = True
+                            break
+
+                if include_event:
                     formatted_event = {
                         "title": fields.get("title", {}).get("stringValue", ""),
                         "description": fields.get("description", {}).get("stringValue", ""),
                         "description_en": fields.get("description_en", {}).get("stringValue", ""),
                         "date": fields.get("date", {}).get("timestampValue", ""),
                         "endDate": fields.get("endDate", {}).get("timestampValue", ""),
-                        "palestrantes_names": speakers,
+                        "palestrantes_names": speakers_string,
                         "session_url": fields.get("transcricao_palestra", {}).get("stringValue", "")
                     }
                     formatted_agenda.append(formatted_event)

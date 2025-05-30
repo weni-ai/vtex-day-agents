@@ -1,10 +1,13 @@
 tests:
     test_1:
       parameters:
-        speaker: "Cadu Fogueral"
+        speaker: "Alexandre Soncini"
     test_2:
       parameters:
-        speaker: "Shane Parrish"
+        speaker: "Mariano Gomide"
     test_3:
+      parameters:
+        speaker: "Guilherme Horn"
+    test_4:
       parameters:
         speaker: ""
