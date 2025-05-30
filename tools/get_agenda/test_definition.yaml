@@ -10,4 +10,19 @@ tests:
         speaker: "Guilherme Horn"
     test_4:
       parameters:
-        speaker: ""
+        time_filter: "now"
+    test_5:
+      parameters:
+        time_filter: "upcoming"
+    test_6:
+      parameters:
+        stage: "main stage"
+    test_7:
+      parameters:
+        time_filter: "now"
+        stage: "main stage"
+    test_8:
+      parameters:
+        time_filter: "today"
+    test_9:
+      parameters: {}

@@ -31,13 +31,63 @@ class GetAgenda(Tool):
         else:
             return {"error": f"Failed to fetch agenda: {response.status_code}"}
 
+    def get_plenaria_data(self):
+        """Fetch plenaria data to resolve stage names"""
+        url = "https://api.coodefy.dev/v1/vtex_plenaria"
+        headers = {
+            'Accept-Language': 'en-US,en;q=0.9,pt-BR;q=0.8,pt;q=0.7,es;q=0.6,nl;q=0.5,fr;q=0.4',
+            'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InNpdGVfdnRleEB3YXByb2plY3QuY29tLmJyIiwiaWRVc2VyIjoiYXRDN3NDbE9oRGZjdjVGMWRzUnVqRk92cEY1eCIsImlhdCI6MTc0NjYzMzUxOX0.BALB7Lj19rGcoot1sLJhk8F_dKUsEVIp2v-5JjMEQTA',
+            'Origin': 'https://vtexday.vtex.com',
+            'Referer': 'https://vtexday.vtex.com/',
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
+            'accept': 'application/json'
+        }
+        
+        try:
+            response = requests.get(url, headers=headers)
+            if response.status_code == 200:
+                return response.json()
+            else:
+                print(f"Failed to fetch plenaria data: {response.status_code}")
+                return []
+        except Exception as e:
+            print(f"Error fetching plenaria data: {e}")
+            return []
+
+    def resolve_stage_name(self, plenaria_reference):
+        """Resolve stage name from plenaria reference"""
+        if not plenaria_reference:
+            return ""
+            
+        plenaria_data = self.get_plenaria_data()
+        
+        # Extract document ID from reference
+        reference_parts = plenaria_reference.split('/')
+        if len(reference_parts) < 6:
+            return plenaria_reference
+            
+        document_id = reference_parts[-1]
+        
+        # Find matching plenaria document
+        for plenaria in plenaria_data:
+            if plenaria.get("name", "").endswith(document_id):
+                fields = plenaria.get("fields", {})
+                stage_name = fields.get("name", {}).get("stringValue", "")
+                if stage_name:
+                    return stage_name
+                    
+        return plenaria_reference
+
     def process_agenda_data(self, raw_data, context: Context):
         speaker_name = context.parameters.get("speaker")  # Obtem o nome do palestrante
+        time_filter = context.parameters.get("time_filter")  # Filtro de tempo (now, current, upcoming, today)
+        stage_filter = context.parameters.get("stage")  # Filtro de palco/stage
 
         if isinstance(raw_data, dict) and "error" in raw_data:
             return raw_data
 
         formatted_agenda = []
+        current_time = datetime.now(pytz.timezone('America/Sao_Paulo'))  # Hora atual no fuso horário de Brasília
 
         for event in raw_data:
             if "fields" in event:
@@ -47,32 +97,112 @@ class GetAgenda(Tool):
                 # Split the speakers string by comma and strip whitespace
                 speakers_list = [speaker.strip() for speaker in speakers_string.split(",") if speaker.strip()]
 
-                # Check if we should include this event
-                include_event = False
-                if not speaker_name:
-                    # If no speaker filter is provided, include all events
-                    include_event = True
-                else:
-                    # Check if the speaker_name matches any of the speakers (case-insensitive partial match)
+                # Get event timing information
+                start_time_str = fields.get("date", {}).get("timestampValue", "")
+                end_time_str = fields.get("endDate", {}).get("timestampValue", "")
+                
+                # Get stage information and resolve stage name
+                plenaria_reference = fields.get("plenaria", {}).get("referenceValue", "")
+                event_stage = self.resolve_stage_name(plenaria_reference)
+                
+                # Convert times to Brasilia timezone for comparison
+                start_time = None
+                end_time = None
+                if start_time_str:
+                    start_time = self.parse_timestamp_to_brasilia(start_time_str)
+                if end_time_str:
+                    end_time = self.parse_timestamp_to_brasilia(end_time_str)
+
+                # Check if we should include this event based on all filters
+                include_event = True
+
+                # Speaker filter
+                if speaker_name:
+                    speaker_match = False
                     for speaker in speakers_list:
                         if speaker_name.lower() in speaker.lower():
-                            include_event = True
+                            speaker_match = True
                             break
+                    if not speaker_match:
+                        include_event = False
+
+                # Time filter
+                if time_filter and include_event:
+                    if time_filter.lower() in ['now', 'current']:
+                        # Event must be happening right now
+                        if not (start_time and end_time and start_time <= current_time <= end_time):
+                            include_event = False
+                    elif time_filter.lower() == 'upcoming':
+                        # Event must start in the future (within next 2 hours)
+                        if not (start_time and start_time > current_time and start_time <= current_time.replace(hour=current_time.hour + 2)):
+                            include_event = False
+                    elif time_filter.lower() == 'today':
+                        # Event must be today
+                        if not (start_time and start_time.date() == current_time.date()):
+                            include_event = False
+
+                # Stage filter - match against resolved stage name
+                if stage_filter and include_event:
+                    if stage_filter.lower() not in event_stage.lower():
+                        include_event = False
 
                 if include_event:
+                    # Calculate time status for current events
+                    time_status = ""
+                    if start_time and end_time:
+                        if current_time < start_time:
+                            # Future event
+                            time_diff = start_time - current_time
+                            hours = int(time_diff.total_seconds() // 3600)
+                            minutes = int((time_diff.total_seconds() % 3600) // 60)
+                            if hours > 0:
+                                time_status = f"Starts in {hours}h {minutes}m"
+                            else:
+                                time_status = f"Starts in {minutes}m"
+                        elif start_time <= current_time <= end_time:
+                            # Current event
+                            time_since_start = current_time - start_time
+                            time_until_end = end_time - current_time
+                            minutes_since_start = int(time_since_start.total_seconds() // 60)
+                            minutes_until_end = int(time_until_end.total_seconds() // 60)
+                            time_status = f"Started {minutes_since_start}m ago, ends in {minutes_until_end}m"
+                        else:
+                            # Past event
+                            time_status = "Ended"
+
                     formatted_event = {
                         "title": fields.get("title", {}).get("stringValue", ""),
                         "description": fields.get("description", {}).get("stringValue", ""),
                         "description_en": fields.get("description_en", {}).get("stringValue", ""),
-                        "date": fields.get("date", {}).get("timestampValue", ""),
-                        "endDate": fields.get("endDate", {}).get("timestampValue", ""),
+                        "date": start_time_str,
+                        "endDate": end_time_str,
+                        "start_time_brasilia": start_time.strftime('%Y-%m-%d %H:%M:%S') if start_time else "",
+                        "end_time_brasilia": end_time.strftime('%Y-%m-%d %H:%M:%S') if end_time else "",
+                        "time_status": time_status,
+                        "stage": event_stage,
                         "palestrantes_names": speakers_string,
                         "session_url": fields.get("transcricao_palestra", {}).get("stringValue", "")
                     }
                     formatted_agenda.append(formatted_event)
 
-        # Retorna a agenda formatada de acordo com o filtro do palestrante (se fornecido) ou todos os eventos
+        # Sort by start time for better presentation
+        formatted_agenda.sort(key=lambda x: x.get("start_time_brasilia", ""))
+        
         return formatted_agenda
+
+    def parse_timestamp_to_brasilia(self, timestamp_str):
+        """Parse timestamp and convert to Brasilia timezone"""
+        brasilia_tz = pytz.timezone('America/Sao_Paulo')
+        try:
+            # Try with microseconds
+            utc_time = datetime.strptime(timestamp_str, '%Y-%m-%dT%H:%M:%S.%fZ')
+        except ValueError:
+            # Try without microseconds
+            utc_time = datetime.strptime(timestamp_str, '%Y-%m-%dT%H:%M:%SZ')
+        
+        utc_time = pytz.utc.localize(utc_time)
+        brasilia_time = utc_time.astimezone(brasilia_tz)
+        return brasilia_time
 
     def convert_utc_to_brasilia(self, utc_time_str):
         brasilia_tz = pytz.timezone('America/Sao_Paulo')
