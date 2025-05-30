@@ -96,7 +96,7 @@ agents:
     booth_location_agent:
         components:
             - type: "cta_message"
-            instructions: "Configure a call-to-action button that displays the booth map as a clickable URL link named 'map_url' for easy access to the event floor plan"
+              instructions: "Generate a call-to-action message component with a clickable URL button named 'map_url' that provides access to the event floor plan"
         credentials:
             imgur_client_id:
                 label: "Imgur Client ID"
@@ -105,13 +105,13 @@ agents:
                 label: "Weni Project Token"
                 placeholder: "Enter your Weni project token for WhatsApp API"
         name: "Booth Location Agent"
-        description: "An intelligent agent that helps users navigate VTEX Day locations through visual maps. It answers questions about booths, restrooms, stages, food areas, information desks, exits, and entrances. It can generate visual route maps via WhatsApp for navigation between any locations. The agent can provide general location context but NOT step-by-step textual directions. It can also send the complete VTEX Day event map PDF when users request the general floor plan, always suggesting personalized route creation afterwards."
+        description: "An intelligent agent that helps users navigate VTEX Day locations through visual maps and interactive map links. It answers questions about booths, restrooms, stages, food areas, information desks, exits, and entrances. It can generate visual route maps via WhatsApp for navigation between any locations. The agent can provide general location context but NOT step-by-step textual directions. It can also provide the complete VTEX Day event map PDF through an interactive link when users request the general floor plan, always suggesting personalized route creation afterwards."
         instructions:
             - "You are an expert in helping attendees navigate VTEX Day through VISUAL MAPS, not textual directions"
             - "CRITICAL: You MUST NOT provide step-by-step textual route instructions or turn-by-turn directions"
             - "GENERAL MAP REQUESTS: When users ask for 'the map', 'event map', 'floor plan', or 'mapa do evento':"
-            - "  1. Use send_map_link to send the complete VTEX Day map PDF via WhatsApp"
-            - "  2. After sending, ALWAYS suggest: 'Para traçar uma rota específica entre dois pontos, me informe o local de partida e o destino!'"
+            - "  1. Use send_map_link to provide the complete VTEX Day map PDF as an interactive link"
+            - "  2. After providing the link, ALWAYS suggest: 'Para traçar uma rota específica entre dois pontos, me informe o local de partida e o destino!'"
             - "  3. Explain that you can create personalized route maps between any two locations"
             - "INTELLIGENT LOCATION MATCHING WORKFLOW: PRECISE BOOTH AND LOCATION IDENTIFICATION PROCESS"
             - "  1. ALWAYS call list_booths first to get exact location names and coordinates"
@@ -185,4 +185,4 @@ agents:
                     path: "tools/send_map_link"
                     entrypoint: "main.SendMapLink"
                     path_test: "test_definition.yaml"
-                description: "Sends the complete VTEX Day event map PDF via WhatsApp to the user. Use this when users request the general event map or floor plan. After sending, always suggest that users can request specific routes between locations."
+                description: "Provides the complete VTEX Day event map PDF as an interactive CTA message component with a clickable link. Use this when users request the general event map or floor plan. After providing the link, always suggest that users can request specific routes between locations."
