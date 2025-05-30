@@ -74,7 +74,7 @@ class GetAgenda(Tool):
         formatted_agenda = []
         # TEMPORARY: Setting current time to June 3, 2025 15:00 for testing time filters
         # current_time = datetime.now(pytz.timezone('America/Sao_Paulo'))  # Hora atual no fuso horário de Brasília
-        current_time = datetime(2025, 6, 3, 15, 0, 0)  # June 3, 2025 at 15:00
+        current_time = datetime(2025, 6, 2, 16, 0, 0)  # June 3, 2025 at 15:00
         current_time = pytz.timezone('America/Sao_Paulo').localize(current_time)
         print(f"DEBUG: Using simulated current time: {current_time}")
 
