@@ -1,0 +1,5 @@
+tests:
+  test_1:
+    parameters:
+      image: "image/jpeg:https://push-ilha-sp-push-media-prod.s3.sa-east-1.amazonaws.com/media/21385/d865/2da4/d8652da4-06fe-4d68-b74e-40b5c138e8fb.jpg"
+      background_color: "pink"

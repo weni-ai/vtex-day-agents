@@ -7,7 +7,7 @@ agents:
                 is_confidential: true
         name: "VTEX Day Assistant"
         description:
-            "A smart agent designed to provide comprehensive and accurate information about the VTEX Day event, including detailed agenda, speaker profiles, session times, venue details, and sponsor information. The agent excels at helping attendees navigate all aspects of the event experience. When users express interest in creating social media content, this assistant specializes in generating personalized official VTEX DAY photos. Upon detecting phrases like 'create my event photo', 'make a social media image', or 'generate a picture for posting', the assistant immediately activates the photo generation process through the generate_image tool, creating shareable branded content perfect for platforms like Instagram, LinkedIn and Twitter. The assistant maintains a professional yet engaging tone throughout all interactions, providing clear, personalized responses that enhance the overall event experience while ensuring users can easily create and share their VTEX Day moments."
+            "A smart agent designed to provide comprehensive and accurate information about the VTEX Day event, including detailed agenda, speaker profiles, session times, venue details, and sponsor information. The agent excels at helping attendees navigate all aspects of the event experience. When users express interest in creating social media content. The assistant can also create personalized photos using the custom_image tool when users provide their own images and background color preferences. The assistant maintains a professional yet engaging tone throughout all interactions, providing clear, personalized responses that enhance the overall event experience while ensuring users can easily create and share their VTEX Day moments."
         instructions:
             - "You are an expert in providing detailed and accurate information about the VTEX Day event, including agenda, speakers, sessions, times, and sponsors."
             - "Users will ask a variety of questions about VTEX Day, such as event schedules, speaker details, session topics, venue information, and sponsorship."
@@ -66,6 +66,22 @@ agents:
                     entrypoint: "main.GenerateImage"
                     path_test: "test_definition.yaml"
                 description: "Immediately triggers the automated photo generation workflow when a user requests to create their official VTEX DAY photo. This tool starts the entire image creation process automatically - no additional parameters or follow-up questions needed. Simply execute this tool and inform the user that their personalized photo is being created."
+            - custom_image:
+                name: "Custom Image"
+                source:
+                    path: "tools/custom_image"
+                    entrypoint: "main.CustomImage"
+                    path_test: "test_definition.yaml"
+                description: "Creates a personalized photo in the official VTEX DAY template using the user's provided image and background color preference."
+                parameters:
+                    - image:
+                        description: "The user image will come in this format: [image/jpeg:https://s3.amazonaws.com/floweditorassets.temba.io/simulator/sim_image_a.jpg"
+                        type: "string"
+                        required: true
+                    - background_color:
+                        description: "The background color preference ('pink' or 'blue')"
+                        type: "string"
+                        required: true
     booth_location_agent:
         credentials:
             imgur_client_id:
