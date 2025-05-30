@@ -5,6 +5,10 @@ agents:
                 label: "API Key"
                 placeholder: "token"
                 is_confidential: true
+            api_image_key:
+                label: "API Image Key"
+                placeholder: "token"
+                is_confidential: true
         name: "VTEX Day Assistant"
         description:
             "A smart agent designed to provide comprehensive and accurate information about the VTEX Day event, including detailed agenda, speaker profiles, session times, venue details, and sponsor information. The agent excels at helping attendees navigate all aspects of the event experience. When users express interest in creating social media content. The assistant can also create personalized photos using the custom_image tool when users provide their own images and background color preferences. The assistant maintains a professional yet engaging tone throughout all interactions, providing clear, personalized responses that enhance the overall event experience while ensuring users can easily create and share their VTEX Day moments."
@@ -75,7 +79,7 @@ agents:
                 description: "Creates a personalized photo in the official VTEX DAY template using the user's provided image and background color preference."
                 parameters:
                     - image:
-                        description: "The user image will come in this format: [image/jpeg:https://s3.amazonaws.com/floweditorassets.temba.io/simulator/sim_image_a.jpg"
+                        description: "The user image will come in this format: image/jpeg:https://push-ilha-sp-push-media-prod.s3.sa-east-1.amazonaws.com/media/21385/d865/2da4/d8652da4-06fe-4d68-b74e-40b5c138e8fb.jpg"
                         type: "string"
                         required: true
                     - background_color:

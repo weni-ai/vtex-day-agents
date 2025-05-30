@@ -3,6 +3,7 @@ from weni.context import Context
 from weni.responses import TextResponse
 import requests
 import base64
+import json
 from io import BytesIO
 
 
@@ -20,13 +21,25 @@ class CustomImage(Tool):
 
         try:
             # Call the image composition API
-            composed_image = self.compose_image(image, background_color)
+            composed_image = self.compose_image(image, background_color, context)
+            print("Composed Image URL:", composed_image)  # Debug print
+            
+            # Send via WhatsApp
+            whatsapp_response = None
+            whatsapp_status = None
+            try:
+                whatsapp_response = self.send_whatsapp_message(composed_image, context)
+                whatsapp_status = "Message sent successfully via WhatsApp"
+            except Exception as e:
+                whatsapp_status = f"WhatsApp delivery failed: {str(e)}"
             
             # Return the response as a dictionary containing the image data
             response_data = {
                 "status": "success",
                 "image": composed_image,
-                "template_used": f"vtex_day_{background_color}"
+                "template_used": f"vtex_day_{background_color}",
+                "whatsapp_status": whatsapp_status,
+                "whatsapp_response": whatsapp_response
             }
             return TextResponse(data=response_data)
         except Exception as e:
@@ -50,20 +63,64 @@ class CustomImage(Tool):
         }
         
 
-        if background_color.upper() == "BLUE":
-            template = "image/jpeg:https://push-ilha-sp-push-media-prod.s3.sa-east-1.amazonaws.com/media/21385/757c/e900/757ce900-4ea3-4e4c-bf1f-3561fa6a959a.jpg"
-        else:
-            template = "image/jpeg:https://push-ilha-sp-push-media-prod.s3.sa-east-1.amazonaws.com/media/21385/89f5/541a/89f5541a-3808-4ff5-b5ec-ecfc927f725b.jpg"
-        
         payload = {
-            "image": image,
-            "background_color": background_color,
-            "template": template
+            "image_url": image,
+            "template": background_color,
         }
         
         response = requests.post(url, json=payload, headers=headers)
         
         if response.status_code != 200:
+            print("Error: ", response.status_code)
+            print("Response: ", response.json())
             raise Exception(f"Failed to compose image. Status code: {response.status_code}")
+        
+        composed_url = response.json().get("image_url", "")
+        print("API Response URL:", composed_url)  # Debug print
             
-        return response.json().get("composed_image", "") 
+        return composed_url
+
+    def send_whatsapp_message(self, image_url: str, context: Context) -> dict:
+        """Send the composed image to the user via WhatsApp"""
+        print("Received Image URL in WhatsApp function:", image_url)  # Debug print
+        
+        # Get parameters from context
+        project_uuid = context.project.get("uuid")
+        urn = context.contact.get("urn")
+        #urn = "whatsapp:5585999854658"
+        #project_uuid = "1deff1d8-d263-49ff-a685-41f5caeb12de"
+        
+        # Get credentials from context
+        project_token = context.credentials.get("project_token")
+        
+        if not project_uuid or not urn:
+            raise Exception("Missing required parameters: project_uuid and urn")
+        
+        if not project_token:
+            raise Exception("Missing required credential: project_token")
+        
+        # Weni WhatsApp API endpoint
+        url = "https://flows.weni.ai/api/v2/whatsapp_broadcasts.json"
+        
+        headers = {
+            "Authorization": f"Token {project_token}",
+            "Content-Type": "application/json"
+        }
+        
+        data = {
+            "urns": [urn],
+            "project": project_uuid,
+            "msg": {
+                "text": "Aqui está sua foto personalizada do VTEX Day! 🎉",
+                "attachments": [f"image/png:{image_url}"]
+            }
+        }
+        
+        print("WhatsApp Request Data:", json.dumps(data, indent=4))  # Debug print
+        
+        try:
+            response = requests.post(url, headers=headers, json=data)
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise Exception(f"Failed to send WhatsApp message: {str(e)}") 
