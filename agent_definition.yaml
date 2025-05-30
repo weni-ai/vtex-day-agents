@@ -94,6 +94,9 @@ agents:
                     path_test: "test_definition.yaml"
                 description: "Immediately triggers the automated photo generation workflow when a user requests to create their official VTEX DAY photo. This tool starts the entire image creation process automatically - no additional parameters or follow-up questions needed. Simply execute this tool and inform the user that their personalized photo is being created."
     booth_location_agent:
+        components:
+            - type: "cta_message"
+            instructions: "Configure a call-to-action button that displays the booth map as a clickable URL link named 'map_url' for easy access to the event floor plan"
         credentials:
             imgur_client_id:
                 label: "Imgur Client ID"
