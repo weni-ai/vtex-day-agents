@@ -54,30 +54,6 @@ class GetAgenda(Tool):
             print(f"Error fetching plenaria data: {e}")
             return []
 
-    def resolve_stage_name(self, plenaria_reference):
-        """Resolve stage name from plenaria reference"""
-        if not plenaria_reference:
-            return ""
-            
-        plenaria_data = self.get_plenaria_data()
-        
-        # Extract document ID from reference
-        reference_parts = plenaria_reference.split('/')
-        if len(reference_parts) < 6:
-            return plenaria_reference
-            
-        document_id = reference_parts[-1]
-        
-        # Find matching plenaria document
-        for plenaria in plenaria_data:
-            if plenaria.get("name", "").endswith(document_id):
-                fields = plenaria.get("fields", {})
-                stage_name = fields.get("name", {}).get("stringValue", "")
-                if stage_name:
-                    return stage_name
-                    
-        return plenaria_reference
-
     def process_agenda_data(self, raw_data, context: Context):
         speaker_name = context.parameters.get("speaker")  # Obtem o nome do palestrante
         time_filter = context.parameters.get("time_filter")  # Filtro de tempo (now, current, upcoming, today)
@@ -85,6 +61,15 @@ class GetAgenda(Tool):
 
         if isinstance(raw_data, dict) and "error" in raw_data:
             return raw_data
+
+        # Fetch plenaria data once and create a lookup dictionary
+        plenaria_lookup = {}
+        plenaria_data = self.get_plenaria_data()
+        for plenaria in plenaria_data:
+            plenaria_id = plenaria.get("name", "")
+            stage_name = plenaria.get("fields", {}).get("name", {}).get("stringValue", "")
+            if plenaria_id and stage_name:
+                plenaria_lookup[plenaria_id] = stage_name
 
         formatted_agenda = []
         current_time = datetime.now(pytz.timezone('America/Sao_Paulo'))  # Hora atual no fuso horário de Brasília
@@ -101,9 +86,9 @@ class GetAgenda(Tool):
                 start_time_str = fields.get("date", {}).get("timestampValue", "")
                 end_time_str = fields.get("endDate", {}).get("timestampValue", "")
                 
-                # Get stage information and resolve stage name
+                # Get stage information using the lookup dictionary
                 plenaria_reference = fields.get("plenaria", {}).get("referenceValue", "")
-                event_stage = self.resolve_stage_name(plenaria_reference)
+                event_stage = plenaria_lookup.get(plenaria_reference, "Unknown Stage")
                 
                 # Convert times to Brasilia timezone for comparison
                 start_time = None
